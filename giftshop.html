@@ -1,0 +1,2612 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="theme-color" content="#be185d" />
+    <title>متجر الهدايا الذهبي - POS Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"
+    />
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap");
+      * {
+        -webkit-tap-highlight-color: transparent;
+        font-family: "Tajawal", sans-serif;
+        box-sizing: border-box;
+      }
+      body {
+        background: linear-gradient(
+          135deg,
+          #fdf2f8 0%,
+          #fce7f3 50%,
+          #f3e8ff 100%
+        );
+        min-height: 100vh;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+      }
+      @media (max-width: 640px) {
+        html {
+          font-size: 14px;
+        }
+      }
+      .pin-box {
+        letter-spacing: 0.5em;
+        font-size: clamp(1.5rem, 5vw, 2rem);
+      }
+      .step {
+        font-size: clamp(0.75rem, 2vw, 0.875rem);
+        padding: 0.5rem 1rem;
+        transition: all 0.3s;
+      }
+      .step-active {
+        background: linear-gradient(135deg, #be185d, #9333ea) !important;
+        color: white !important;
+      }
+      .sidebar {
+        width: 270px;
+        transition: transform 0.3s ease;
+        background: linear-gradient(
+          180deg,
+          #1a0533 0%,
+          #2d1b69 50%,
+          #1e0a3c 100%
+        );
+        flex-shrink: 0;
+        overflow-y: auto;
+      }
+      @media (max-width: 1024px) {
+        .sidebar {
+          position: fixed;
+          right: auto;
+          left: 0;
+          top: 0;
+          height: 100vh;
+          z-index: 40;
+          transform: translateX(-100%);
+        }
+        .sidebar.open {
+          transform: translateX(0);
+        }
+      }
+      .sidebar-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 39;
+      }
+      .sidebar-overlay.active {
+        display: block;
+      }
+      .sidebar-item {
+        padding: 0.75rem 1.25rem;
+        margin-bottom: 0.35rem;
+        border-radius: 14px;
+        cursor: pointer;
+        transition: all 0.25s;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 0.95rem;
+        color: #e9d5ff;
+        user-select: none;
+      }
+      .sidebar-item:hover {
+        background: rgba(236, 72, 153, 0.3);
+        color: white;
+      }
+      .sidebar-item.active {
+        background: linear-gradient(
+          135deg,
+          rgba(236, 72, 153, 0.6),
+          rgba(147, 51, 234, 0.6)
+        );
+        color: white;
+        font-weight: bold;
+        border-right: 3px solid #f472b6;
+      }
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 50;
+        inset: 0;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(8px);
+        padding: 1rem;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal.show {
+        display: flex;
+      }
+      .modal-content {
+        background: white;
+        margin: auto;
+        padding: 0;
+        border-radius: 24px;
+        width: 100%;
+        max-width: 600px;
+        box-shadow: 0 25px 60px rgba(190, 24, 93, 0.3);
+        animation: slideDown 0.3s ease-out;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+      @keyframes slideDown {
+        from {
+          transform: translateY(-40px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+      .gift-card {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 4px 20px rgba(190, 24, 93, 0.08);
+        border: 1px solid rgba(236, 72, 153, 0.12);
+        transition: all 0.3s;
+      }
+      .gift-card:hover {
+        box-shadow: 0 8px 30px rgba(190, 24, 93, 0.12);
+      }
+      .product-quick-card {
+        background: linear-gradient(135deg, #fff0f9, #fdf4ff);
+        border: 2px solid rgba(236, 72, 153, 0.15);
+        border-radius: 16px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-align: center;
+        user-select: none;
+      }
+      .product-quick-card:hover {
+        background: linear-gradient(135deg, #fce7f3, #f3e8ff);
+        border-color: #ec4899;
+        transform: scale(1.02);
+      }
+      .product-quick-card:active {
+        transform: scale(0.97);
+      }
+      .product-quick-card.out-of-stock {
+        opacity: 0.4;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+      .stat-card {
+        background: linear-gradient(135deg, var(--from), var(--to));
+        color: white;
+        padding: 1.25rem;
+        border-radius: 1.25rem;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+      }
+      .sync-success {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+        padding: 1rem;
+        border-radius: 12px;
+        margin-top: 0.75rem;
+        font-weight: 600;
+      }
+      .sync-error {
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        color: white;
+        padding: 1rem;
+        border-radius: 12px;
+        margin-top: 0.75rem;
+        font-weight: 600;
+      }
+      .sync-loading {
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        color: white;
+        padding: 1rem;
+        border-radius: 12px;
+        margin-top: 0.75rem;
+        font-weight: 600;
+        animation: pulse 1.5s infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.7;
+        }
+      }
+      .mobile-menu-btn {
+        display: none;
+        position: fixed;
+        bottom: 1.5rem;
+        left: 1.5rem;
+        z-index: 50;
+        background: linear-gradient(135deg, #be185d, #9333ea);
+        color: white;
+        width: 3.5rem;
+        height: 3.5rem;
+        border-radius: 50%;
+        box-shadow: 0 6px 20px rgba(190, 24, 93, 0.4);
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+        border: none;
+        cursor: pointer;
+      }
+      @media (max-width: 1024px) {
+        .mobile-menu-btn {
+          display: flex;
+        }
+      }
+      @keyframes float {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-8px);
+        }
+      }
+      .float-icon {
+        animation: float 3s ease-in-out infinite;
+      }
+      ::-webkit-scrollbar {
+        width: 5px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f9e8f5;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #ec4899;
+        border-radius: 3px;
+      }
+      @media print {
+        body * {
+          visibility: hidden;
+        }
+        #receipt,
+        #receipt * {
+          visibility: visible;
+        }
+        #receipt {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 300px;
+        }
+      }
+      .setup-link-box {
+        background: linear-gradient(135deg, #ec4899, #9333ea);
+        padding: 1rem;
+        border-radius: 1rem;
+        word-break: break-all;
+        color: white;
+      }
+      .loading-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      }
+      .loading-box {
+        background: white;
+        padding: 30px;
+        border-radius: 24px;
+        text-align: center;
+        max-width: 400px;
+      }
+      .toast-container {
+        position: fixed;
+        top: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        pointer-events: none;
+        width: 92%;
+        max-width: 420px;
+      }
+      .toast {
+        padding: 0.85rem 1.25rem;
+        border-radius: 14px;
+        color: white;
+        font-weight: 700;
+        font-size: 0.9rem;
+        text-align: center;
+        animation: toastIn 0.35s ease-out;
+        pointer-events: auto;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+      }
+      .toast-success {
+        background: linear-gradient(135deg, #10b981, #059669);
+      }
+      .toast-error {
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+      }
+      .toast-info {
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+      }
+      @keyframes toastIn {
+        from {
+          transform: translateY(-20px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+      @keyframes toastOut {
+        from {
+          opacity: 1;
+        }
+        to {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+      }
+      .main-layout {
+        display: flex;
+        min-height: 100vh;
+      }
+      .main-content-area {
+        flex: 1;
+        min-width: 0;
+        padding: 1rem;
+        overflow-x: hidden;
+        overflow-y: auto;
+        max-height: 100vh;
+      }
+      @media (min-width: 640px) {
+        .main-content-area {
+          padding: 1.5rem;
+        }
+      }
+      @media (min-width: 1024px) {
+        .main-content-area {
+          padding: 2rem;
+        }
+      }
+      @media (max-width: 768px) {
+        table {
+          font-size: 0.7rem;
+        }
+        th,
+        td {
+          padding: 0.4rem !important;
+        }
+      }
+      .pos-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+      }
+      @media (min-width: 1024px) {
+        .pos-grid {
+          grid-template-columns: 1.4fr 1fr;
+          gap: 1.5rem;
+        }
+      }
+      .quick-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+      }
+      @media (min-width: 640px) {
+        .quick-grid {
+          grid-template-columns: repeat(3, 1fr);
+          gap: 0.6rem;
+        }
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+      }
+      @media (min-width: 1024px) {
+        .stats-grid {
+          grid-template-columns: repeat(4, 1fr);
+        }
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+      }
+      @media (min-width: 1024px) {
+        .two-col {
+          grid-template-columns: 1fr 1fr;
+          gap: 1.5rem;
+        }
+      }
+      .three-col {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+      }
+      @media (min-width: 768px) {
+        .three-col {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (min-width: 1024px) {
+        .three-col {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, #be185d, #9333ea);
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-weight: 700;
+        border-radius: 1rem;
+        transition: opacity 0.2s;
+        font-family: "Tajawal", sans-serif;
+      }
+      .btn-primary:hover {
+        opacity: 0.9;
+      }
+      .btn {
+        border: none;
+        cursor: pointer;
+        font-family: "Tajawal", sans-serif;
+      }
+      input,
+      select,
+      textarea {
+        font-family: "Tajawal", sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <button
+      id="mobileMenuBtn"
+      class="mobile-menu-btn"
+      onclick="toggleMobileSidebar()"
+    >
+      <i class="fa-solid fa-bars"></i>
+    </button>
+    <div
+      id="sidebarOverlay"
+      class="sidebar-overlay"
+      onclick="toggleMobileSidebar()"
+    ></div>
+
+    <!-- Setup Screen -->
+    <div
+      id="setupScreen"
+      class="min-h-screen hidden flex items-center justify-center p-4"
+      style="
+        background: linear-gradient(
+          135deg,
+          #1a0533 0%,
+          #be185d 50%,
+          #9333ea 100%
+        );
+      "
+    >
+      <div
+        class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden"
+      >
+        <div
+          class="p-6 text-center"
+          style="background: linear-gradient(135deg, #be185d, #9333ea)"
+        >
+          <div class="text-5xl mb-3 float-icon">🎁</div>
+          <h1 class="text-2xl sm:text-3xl font-bold text-white">
+            مرحباً بك في متجر الهدايا
+          </h1>
+          <p class="mt-2 text-pink-200 text-sm">إعداد نظام نقطة البيع</p>
+        </div>
+        <div class="flex flex-wrap justify-center px-4 sm:px-8 pt-6 gap-2">
+          <div id="step1" class="step rounded-full cursor-pointer step-active">
+            1. المتجر
+          </div>
+          <div id="step2" class="step rounded-full cursor-pointer bg-gray-100">
+            2. المدير
+          </div>
+          <div id="step3" class="step rounded-full cursor-pointer bg-gray-100">
+            3. المزامنة
+          </div>
+        </div>
+        <div class="p-4 sm:p-8" id="setupContent"></div>
+        <div
+          class="flex flex-col sm:flex-row justify-between gap-3 p-4 sm:p-6 border-t"
+        >
+          <button
+            onclick="prevStep()"
+            class="btn px-6 py-3 text-gray-600 hover:bg-gray-100 rounded-2xl order-2 sm:order-1 bg-transparent"
+          >
+            السابق
+          </button>
+          <button
+            onclick="nextStep()"
+            class="px-8 py-3 btn-primary order-1 sm:order-2"
+          >
+            التالي ✨
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Login Screen -->
+    <div
+      id="loginScreen"
+      class="min-h-screen hidden flex items-center justify-center p-4"
+      style="
+        background: linear-gradient(
+          135deg,
+          #1a0533 0%,
+          #be185d 50%,
+          #9333ea 100%
+        );
+      "
+    >
+      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8">
+        <div class="text-center mb-6">
+          <div class="text-6xl mb-4 float-icon">🎁</div>
+          <h1
+            class="text-2xl sm:text-3xl font-bold bg-clip-text text-transparent"
+            style="
+              background: linear-gradient(135deg, #be185d, #9333ea);
+              -webkit-background-clip: text;
+            "
+            id="shopNameDisplay"
+          >
+            متجر الهدايا
+          </h1>
+          <p class="text-gray-500 mt-2 text-sm">أدخل كودك للدخول</p>
+        </div>
+        <div class="mb-6">
+          <input
+            type="password"
+            id="pinInputDirect"
+            maxlength="6"
+            inputmode="numeric"
+            autocomplete="off"
+            placeholder="● ● ● ● ● ●"
+            class="w-full text-center text-2xl sm:text-4xl tracking-widest py-4 sm:py-5 border-2 border-pink-200 rounded-2xl focus:outline-none focus:border-pink-500 pin-box bg-pink-50"
+            onkeypress="if (event.key === 'Enter') verifyLoginDirect();"
+          />
+        </div>
+        <button
+          onclick="verifyLoginDirect()"
+          class="w-full py-4 btn-primary text-lg shadow-lg mb-4"
+        >
+          <i class="fa-solid fa-right-to-bracket"></i> دخول
+        </button>
+        <div class="text-center">
+          <button
+            onclick="showPinPad()"
+            class="btn text-pink-600 text-sm hover:underline bg-transparent"
+          >
+            🔢 لوحة الأرقام
+          </button>
+        </div>
+        <div id="pinPadSection" class="hidden mt-6">
+          <input
+            type="text"
+            id="pinInput"
+            maxlength="6"
+            readonly
+            class="w-full text-center text-3xl tracking-widest py-4 border-2 border-pink-200 rounded-2xl mb-4 pin-box bg-pink-50"
+            placeholder="••••••"
+          />
+          <div class="grid grid-cols-3 gap-2 mb-4" id="pinPad"></div>
+          <div class="flex gap-3">
+            <button
+              onclick="clearPin()"
+              class="btn flex-1 py-3 bg-gray-100 rounded-xl font-semibold text-gray-700"
+            >
+              مسح
+            </button>
+            <button onclick="verifyLoginPad()" class="flex-1 py-3 btn-primary">
+              دخول
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" class="hidden">
+      <div class="main-layout">
+        <div
+          id="sidebar"
+          class="sidebar text-white p-4 flex flex-col"
+          style="min-height: 100vh"
+        >
+          <div class="text-center mb-6 pb-4 border-b border-purple-700">
+            <div class="text-3xl mb-2 float-icon">🎁</div>
+            <div class="text-base font-bold text-pink-300" id="sidebarShopName">
+              متجر الهدايا
+            </div>
+            <div class="text-xs text-purple-400">نظام نقطة البيع</div>
+          </div>
+          <div class="flex-1 overflow-y-auto space-y-1" id="sidebarNav"></div>
+          <div
+            class="mt-auto rounded-2xl p-3"
+            style="background: rgba(255, 255, 255, 0.1)"
+          >
+            <div id="currentUserDisplay" class="text-xs mb-2"></div>
+            <div id="syncIndicator" class="text-xs text-purple-300 mb-2"></div>
+            <button
+              onclick="logout()"
+              class="btn w-full bg-red-600 hover:bg-red-700 py-2 rounded-xl text-xs font-semibold text-white"
+            >
+              <i class="fa-solid fa-right-from-bracket"></i> خروج
+            </button>
+          </div>
+        </div>
+        <div class="main-content-area" id="mainContent"></div>
+      </div>
+    </div>
+
+    <!-- Product Modal -->
+    <div id="productModal" class="modal">
+      <div class="modal-content">
+        <div
+          class="p-4 sm:p-6 rounded-t-3xl flex justify-between items-center"
+          style="background: linear-gradient(135deg, #be185d, #9333ea)"
+        >
+          <h3 class="text-lg font-bold text-white" id="modalProductTitle">
+            🎁 إضافة منتج
+          </h3>
+          <button
+            onclick="closeModal('productModal')"
+            class="btn text-white hover:text-pink-200 text-2xl bg-transparent"
+          >
+            &times;
+          </button>
+        </div>
+        <div class="p-4 sm:p-6">
+          <form id="productForm" onsubmit="saveProduct(event)">
+            <input type="hidden" id="prodId" />
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              <div class="sm:col-span-2">
+                <label class="block text-sm font-semibold mb-1 text-gray-700"
+                  >اسم المنتج</label
+                >
+                <input
+                  type="text"
+                  id="prodName"
+                  required
+                  class="w-full p-3 border-2 border-pink-100 rounded-xl focus:border-pink-400 outline-none"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-semibold mb-1 text-gray-700"
+                  >الباركود</label
+                >
+                <input
+                  type="text"
+                  id="prodBarcode"
+                  class="w-full p-3 border-2 border-pink-100 rounded-xl outline-none"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-semibold mb-1 text-gray-700"
+                  >الفئة</label
+                >
+                <select
+                  id="prodCategory"
+                  class="w-full p-3 border-2 border-pink-100 rounded-xl bg-white"
+                >
+                  <option value="هدايا">هدايا</option>
+                  <option value="تغليف">تغليف</option>
+                  <option value="بطاقات">بطاقات</option>
+                  <option value="ديكور">ديكور</option>
+                  <option value="ألعاب">ألعاب</option>
+                  <option value="حلويات">حلويات</option>
+                  <option value="أخرى">أخرى</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-semibold mb-1 text-gray-700"
+                  >وحدة البيع</label
+                >
+                <select
+                  id="prodUnit"
+                  class="w-full p-3 border-2 border-pink-100 rounded-xl bg-white"
+                >
+                  <option value="piece">قطعة</option>
+                  <option value="box">علبة</option>
+                  <option value="pack">طقم</option>
+                  <option value="set">مجموعة</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-semibold mb-1 text-gray-700"
+                  >المخزون</label
+                >
+                <input
+                  type="number"
+                  id="prodStock"
+                  required
+                  class="w-full p-3 border-2 border-pink-100 rounded-xl outline-none"
+                />
+              </div>
+              <div class="sm:col-span-2 grid grid-cols-3 gap-2 mt-2">
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1"
+                    >التكلفة (دج)</label
+                  ><input
+                    type="number"
+                    step="0.01"
+                    id="prodCost"
+                    class="w-full p-2 border-2 border-gray-100 rounded-lg bg-gray-50 outline-none"
+                  />
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1"
+                    >الجملة (دج)</label
+                  ><input
+                    type="number"
+                    step="0.01"
+                    id="prodWholesale"
+                    class="w-full p-2 border-2 border-gray-100 rounded-lg bg-gray-50 outline-none"
+                  />
+                </div>
+                <div>
+                  <label class="block text-xs text-pink-600 font-bold mb-1"
+                    >التجزئة (دج)</label
+                  ><input
+                    type="number"
+                    step="0.01"
+                    id="prodRetail"
+                    required
+                    class="w-full p-2 border-2 border-pink-300 rounded-lg bg-pink-50 font-bold outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+            <div class="flex gap-3 mt-6">
+              <button
+                type="button"
+                onclick="closeModal('productModal')"
+                class="btn flex-1 py-3 bg-gray-100 rounded-xl font-semibold text-gray-700"
+              >
+                إلغاء
+              </button>
+              <button type="submit" class="flex-1 py-3 btn-primary">
+                💾 حفظ
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Debt Modal -->
+    <div id="debtModal" class="modal">
+      <div class="modal-content">
+        <div
+          class="p-4 sm:p-6 rounded-t-3xl flex justify-between items-center"
+          style="background: linear-gradient(135deg, #ea580c, #dc2626)"
+        >
+          <h3 class="text-lg font-bold text-white">📝 تسجيل دين</h3>
+          <button
+            onclick="closeModal('debtModal')"
+            class="btn text-white text-2xl bg-transparent"
+          >
+            &times;
+          </button>
+        </div>
+        <div class="p-4 sm:p-6">
+          <form id="debtForm" onsubmit="saveDebt(event)">
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1">اسم المدين</label
+              ><input
+                type="text"
+                id="debtCustomer"
+                required
+                class="w-full p-3 border-2 border-orange-100 rounded-xl outline-none"
+              />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1">رقم الهاتف</label
+              ><input
+                type="tel"
+                id="debtPhone"
+                placeholder="0555123456"
+                class="w-full p-3 border-2 border-orange-100 rounded-xl outline-none"
+              />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1">المبلغ (دج)</label
+              ><input
+                type="number"
+                id="debtAmount"
+                readonly
+                class="w-full p-3 border-2 border-orange-100 rounded-xl bg-orange-50 font-bold text-xl"
+              />
+            </div>
+            <div class="flex gap-3 mt-6">
+              <button
+                type="button"
+                onclick="closeModal('debtModal')"
+                class="btn flex-1 py-3 bg-gray-100 rounded-xl font-semibold"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                class="btn flex-1 py-3 bg-orange-600 text-white rounded-xl font-semibold"
+              >
+                تسجيل
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Supplier Modal -->
+    <div id="supplierModal" class="modal">
+      <div class="modal-content">
+        <div
+          class="p-4 sm:p-6 rounded-t-3xl flex justify-between items-center"
+          style="background: linear-gradient(135deg, #2563eb, #1d4ed8)"
+        >
+          <h3 class="text-lg font-bold text-white" id="modalSupplierTitle">
+            🚚 إضافة مورد
+          </h3>
+          <button
+            onclick="closeModal('supplierModal')"
+            class="btn text-white text-2xl bg-transparent"
+          >
+            &times;
+          </button>
+        </div>
+        <div class="p-4 sm:p-6">
+          <form id="supplierForm" onsubmit="saveSupplier(event)">
+            <input type="hidden" id="supplierId" />
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1">اسم المورد</label
+              ><input
+                type="text"
+                id="supplierName"
+                required
+                class="w-full p-3 border-2 border-blue-100 rounded-xl outline-none"
+              />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1">رقم الهاتف</label
+              ><input
+                type="tel"
+                id="supplierPhone"
+                class="w-full p-3 border-2 border-blue-100 rounded-xl outline-none"
+              />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1">العنوان</label
+              ><input
+                type="text"
+                id="supplierAddress"
+                class="w-full p-3 border-2 border-blue-100 rounded-xl outline-none"
+              />
+            </div>
+            <div class="flex gap-3 mt-6">
+              <button
+                type="button"
+                onclick="closeModal('supplierModal')"
+                class="btn flex-1 py-3 bg-gray-100 rounded-xl font-semibold"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                class="btn flex-1 py-3 bg-blue-700 text-white rounded-xl font-semibold"
+              >
+                حفظ
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Purchase Modal -->
+    <div id="purchaseModal" class="modal">
+      <div class="modal-content">
+        <div
+          class="p-4 sm:p-6 rounded-t-3xl flex justify-between items-center"
+          style="background: linear-gradient(135deg, #059669, #047857)"
+        >
+          <h3 class="text-lg font-bold text-white">🛒 تسجيل مشتريات</h3>
+          <button
+            onclick="closeModal('purchaseModal')"
+            class="btn text-white text-2xl bg-transparent"
+          >
+            &times;
+          </button>
+        </div>
+        <div class="p-4 sm:p-6">
+          <form id="purchaseForm" onsubmit="savePurchase(event)">
+            <input type="hidden" id="purchaseSupplierId" />
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1">المورد</label
+              ><input
+                type="text"
+                id="purchaseSupplierName"
+                readonly
+                class="w-full p-3 border-2 border-green-100 rounded-xl bg-green-50 font-bold"
+              />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1"
+                >المبلغ الإجمالي (دج)</label
+              ><input
+                type="number"
+                step="0.01"
+                id="purchaseAmount"
+                required
+                class="w-full p-3 border-2 border-green-200 rounded-xl text-xl font-bold outline-none"
+              />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1">ملاحظات</label
+              ><textarea
+                id="purchaseNotes"
+                rows="2"
+                class="w-full p-3 border-2 border-green-100 rounded-xl outline-none"
+              ></textarea>
+            </div>
+            <div class="flex gap-3 mt-6">
+              <button
+                type="button"
+                onclick="closeModal('purchaseModal')"
+                class="btn flex-1 py-3 bg-gray-100 rounded-xl font-semibold"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                class="btn flex-1 py-3 bg-green-700 text-white rounded-xl font-semibold"
+              >
+                تسجيل
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Worker Modal -->
+    <div id="workerModal" class="modal">
+      <div class="modal-content">
+        <div
+          class="p-4 sm:p-6 rounded-t-3xl flex justify-between items-center"
+          style="background: linear-gradient(135deg, #7c3aed, #6d28d9)"
+        >
+          <h3 class="text-lg font-bold text-white" id="modalWorkerTitle">
+            👤 إضافة موظف
+          </h3>
+          <button
+            onclick="closeModal('workerModal')"
+            class="btn text-white text-2xl bg-transparent"
+          >
+            &times;
+          </button>
+        </div>
+        <div class="p-4 sm:p-6">
+          <form id="workerForm" onsubmit="saveWorker(event)">
+            <input type="hidden" id="workerId" />
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1">اسم الموظف</label
+              ><input
+                type="text"
+                id="workerName"
+                required
+                class="w-full p-3 border-2 border-purple-100 rounded-xl outline-none"
+              />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1">رقم الهاتف</label
+              ><input
+                type="tel"
+                id="workerPhone"
+                class="w-full p-3 border-2 border-purple-100 rounded-xl outline-none"
+              />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1"
+                >الكود (4-6 أرقام)</label
+              ><input
+                type="text"
+                id="workerPin"
+                required
+                maxlength="6"
+                inputmode="numeric"
+                autocomplete="off"
+                class="w-full p-3 border-2 border-purple-100 rounded-xl text-center text-2xl outline-none"
+              />
+            </div>
+            <div class="flex gap-3 mt-6">
+              <button
+                type="button"
+                onclick="closeModal('workerModal')"
+                class="btn flex-1 py-3 bg-gray-100 rounded-xl font-semibold"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                class="btn flex-1 py-3 bg-purple-700 text-white rounded-xl font-semibold"
+              >
+                حفظ
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ====================== DATA ======================
+      let db = {
+        setupCompleted: false,
+        shopName: "متجر الهدايا الذهبي",
+        manager: { name: "", pin: "", phone: "" },
+        workers: [],
+        products: [],
+        sales: [],
+        debts: [],
+        suppliers: [],
+        purchases: [],
+        transactions: [],
+        cashRegister: 0,
+        nextInvoice: 1001,
+        googleSheetURL: "",
+        lastSyncTime: null,
+        autoSyncEnabled: false,
+        currentUser: null,
+      };
+      let currentStep = 1;
+      let setupData = {
+        shopName: "",
+        managerName: "",
+        managerPin: "",
+        googleURL: "",
+      };
+      let currentPin = "";
+      let cart = [];
+      let syncInterval = null;
+      let activePage = 0;
+      const CURRENCY = "دج";
+      const CAT_EMOJI = {
+        هدايا: "🎁",
+        ألعاب: "🧸",
+        بطاقات: "💌",
+        حلويات: "🍫",
+        ديكور: "🎀",
+        تغليف: "📦",
+        أخرى: "✨",
+      };
+
+      const NAV_ITEMS = [
+        {
+          icon: "fa-cash-register",
+          color: "text-pink-400",
+          label: "نقطة البيع",
+        },
+        { icon: "fa-gift", color: "text-purple-400", label: "المنتجات" },
+        { icon: "fa-users", color: "text-blue-400", label: "الديون" },
+        { icon: "fa-truck", color: "text-yellow-400", label: "الموردين" },
+        { icon: "fa-chart-bar", color: "text-green-400", label: "التقارير" },
+        { icon: "fa-wallet", color: "text-orange-400", label: "الخزنة" },
+        { icon: "fa-sync", color: "text-cyan-400", label: "المزامنة" },
+        { icon: "fa-user-tie", color: "text-red-400", label: "المدير" },
+      ];
+
+      // ====================== HELPERS ======================
+      function saveData() {
+        try {
+          localStorage.setItem("giftShopDB", JSON.stringify(db));
+        } catch (e) {}
+      }
+      function n(v) {
+        const x = parseFloat(v);
+        return isNaN(x) ? 0 : x;
+      }
+      function fmtDate(d) {
+        try {
+          return new Date(d).toLocaleString("ar-DZ", {
+            dateStyle: "short",
+            timeStyle: "short",
+          });
+        } catch (e) {
+          return d || "";
+        }
+      }
+
+      // ====================== TOAST ======================
+      function toast(msg, type = "success", dur = 3000) {
+        const c = document.getElementById("toastContainer");
+        const t = document.createElement("div");
+        t.className = `toast toast-${type}`;
+        t.textContent = msg;
+        c.appendChild(t);
+        setTimeout(() => {
+          t.style.animation = "toastOut 0.3s forwards";
+          setTimeout(() => t.remove(), 300);
+        }, dur);
+      }
+
+      // ====================== SOUNDS ======================
+      const ACtx = window.AudioContext || window.webkitAudioContext;
+      function beep(f, tp, d, v) {
+        try {
+          const c = new ACtx(),
+            o = c.createOscillator(),
+            g = c.createGain();
+          o.connect(g);
+          g.connect(c.destination);
+          o.frequency.value = f;
+          o.type = tp;
+          g.gain.setValueAtTime(v, c.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.01, c.currentTime + d);
+          o.start();
+          o.stop(c.currentTime + d);
+        } catch (e) {}
+      }
+      function sndOk() {
+        [523, 659, 784].forEach((f, i) =>
+          setTimeout(() => beep(f, "sine", 0.2, 0.2), i * 120),
+        );
+      }
+      function sndErr() {
+        beep(200, "sawtooth", 0.3, 0.2);
+      }
+      function sndClick() {
+        beep(800, "sine", 0.08, 0.08);
+      }
+
+      // ====================== TRANSACTIONS ======================
+      function addTx(type, desc, amt) {
+        amt = n(amt);
+        if (type === "in") db.cashRegister += amt;
+        else if (type === "out") db.cashRegister -= amt;
+        db.transactions.push({
+          id: Date.now(),
+          date: new Date().toISOString(),
+          type,
+          description: desc,
+          amount: amt,
+          balanceAfter: db.cashRegister,
+          user: db.currentUser ? db.currentUser.name : "النظام",
+        });
+        saveData();
+      }
+
+      // ====================== SIDEBAR NAV ======================
+      function buildSidebar() {
+        const nav = document.getElementById("sidebarNav");
+        if (!nav) return;
+        nav.innerHTML = NAV_ITEMS.map(
+          (item, i) =>
+            `<div class="sidebar-item ${i === activePage ? "active" : ""}" data-page="${i}" onclick="navClick(${i})">
+            <i class="fa-solid ${item.icon} ${item.color}"></i><span>${item.label}</span>
+          </div>`,
+        ).join("");
+      }
+
+      function navClick(pg) {
+        activePage = pg;
+        buildSidebar();
+        closeMobileSidebar();
+        loadPage(pg);
+      }
+
+      // ====================== INIT ======================
+      window.onload = async () => {
+        const params = new URLSearchParams(window.location.search);
+        const sheetURL = params.get("sheet");
+        const autoSetup = params.get("autoSetup");
+        const saved = localStorage.getItem("giftShopDB");
+        if (saved) {
+          try {
+            db = { ...db, ...JSON.parse(saved) };
+          } catch (e) {}
+        }
+        [
+          "products",
+          "sales",
+          "debts",
+          "suppliers",
+          "workers",
+          "purchases",
+          "transactions",
+        ].forEach((k) => {
+          if (!Array.isArray(db[k])) db[k] = [];
+        });
+        if (!db.manager) db.manager = { name: "", pin: "", phone: "" };
+        if (!db.cashRegister) db.cashRegister = 0;
+
+        if (sheetURL && autoSetup === "true" && !db.setupCompleted) {
+          await quickSetup(sheetURL);
+          return;
+        }
+        if (sheetURL && db.setupCompleted) {
+          db.googleSheetURL = decodeURIComponent(sheetURL);
+          saveData();
+          toast("✅ تم تحديث رابط المزامنة");
+          showLogin();
+          return;
+        }
+        if (!db.setupCompleted) {
+          document.getElementById("setupScreen").classList.remove("hidden");
+          showSetupStep(1);
+        } else showLogin();
+      };
+
+      async function quickSetup(url) {
+        db.googleSheetURL = decodeURIComponent(url);
+        const ov = document.createElement("div");
+        ov.className = "loading-overlay";
+        ov.innerHTML = `<div class="loading-box"><div style="font-size:50px" class="float-icon">☁️</div><h3 style="font-size:18px;font-weight:700;color:#be185d;margin-top:12px">جاري التحميل...</h3></div>`;
+        document.body.appendChild(ov);
+        try {
+          const r = await fetch(db.googleSheetURL + "?action=get");
+          const d = await r.json();
+          if (d.status === "success" && d.hasData) {
+            Object.assign(db, {
+              setupCompleted: true,
+              shopName: d.shopName || db.shopName,
+              manager: {
+                name: d.manager?.name || "",
+                pin: String(d.manager?.pin || ""),
+                phone: d.manager?.phone || "",
+              },
+              cashRegister: n(d.cashRegister),
+              nextInvoice: d.nextInvoice || 1001,
+            });
+            [
+              "products",
+              "sales",
+              "debts",
+              "suppliers",
+              "workers",
+              "purchases",
+              "transactions",
+            ].forEach((k) => {
+              if (d[k]) db[k] = d[k];
+            });
+            saveData();
+            ov.remove();
+            toast(`✅ تم استعادة ${db.products.length} منتج`);
+            showLogin();
+            return;
+          }
+        } catch (e) {
+          console.log("No cloud data");
+        }
+        ov.remove();
+        db.setupCompleted = true;
+        db.shopName = "متجر الهدايا الذهبي";
+        db.manager = { name: "المدير", pin: "123456", phone: "" };
+        db.products = defProducts();
+        db.suppliers = [
+          {
+            id: 1,
+            name: "مورد الهدايا",
+            phone: "0551234567",
+            address: "",
+            totalPurchases: 0,
+          },
+        ];
+        saveData();
+        await syncUp(true);
+        toast("✅ كود المدير: 123456", "success", 5000);
+        showLogin();
+      }
+
+      function defProducts() {
+        return [
+          {
+            id: 1,
+            name: "علبة هدية فاخرة",
+            barcode: "G001",
+            cost: 500,
+            retail: 950,
+            wholesale: 750,
+            stock: 50,
+            category: "هدايا",
+            unit: "piece",
+          },
+          {
+            id: 2,
+            name: "دمية أفخم",
+            barcode: "G002",
+            cost: 800,
+            retail: 1500,
+            wholesale: 1200,
+            stock: 30,
+            category: "ألعاب",
+            unit: "piece",
+          },
+          {
+            id: 3,
+            name: "بطاقة معايدة",
+            barcode: "G003",
+            cost: 50,
+            retail: 150,
+            wholesale: 100,
+            stock: 200,
+            category: "بطاقات",
+            unit: "piece",
+          },
+          {
+            id: 4,
+            name: "شوكولاتة هدية",
+            barcode: "G004",
+            cost: 600,
+            retail: 1200,
+            wholesale: 950,
+            stock: 80,
+            category: "حلويات",
+            unit: "box",
+          },
+          {
+            id: 5,
+            name: "طقم عطر",
+            barcode: "G005",
+            cost: 1500,
+            retail: 3000,
+            wholesale: 2400,
+            stock: 20,
+            category: "هدايا",
+            unit: "set",
+          },
+        ];
+      }
+
+      function toggleMobileSidebar() {
+        document.getElementById("sidebar").classList.toggle("open");
+        document.getElementById("sidebarOverlay").classList.toggle("active");
+      }
+      function closeMobileSidebar() {
+        document.getElementById("sidebar").classList.remove("open");
+        document.getElementById("sidebarOverlay").classList.remove("active");
+      }
+
+      // ====================== SETUP ======================
+      function showSetupStep(s) {
+        currentStep = s;
+        for (let i = 1; i <= 3; i++) {
+          const el = document.getElementById("step" + i);
+          el.className =
+            i === s
+              ? "step rounded-full cursor-pointer step-active"
+              : "step rounded-full cursor-pointer bg-gray-100 text-gray-600";
+        }
+        const c = document.getElementById("setupContent");
+        const cls =
+          "w-full p-3 sm:p-4 border-2 border-pink-100 rounded-2xl text-lg focus:outline-none focus:border-pink-400";
+        if (s === 1)
+          c.innerHTML = `<h2 class="text-xl font-bold mb-4 text-gray-800">🎁 اسم المتجر</h2><input id="shopNameInput" type="text" value="${setupData.shopName || "متجر الهدايا الذهبي"}" class="${cls}"/>`;
+        else if (s === 2)
+          c.innerHTML = `<h2 class="text-xl font-bold mb-4 text-gray-800">👤 حساب المدير</h2><input id="managerNameInput" type="text" placeholder="اسم المدير" value="${setupData.managerName}" class="${cls} mb-4"/><input id="managerPinInput" type="text" maxlength="6" inputmode="numeric" autocomplete="off" placeholder="الكود السري (4+ أرقام)" class="${cls} text-center text-2xl tracking-widest"/>`;
+        else
+          c.innerHTML = `<h2 class="text-xl font-bold mb-4 text-gray-800">☁️ المزامنة (اختياري)</h2><p class="text-gray-500 text-sm mb-4">أضف رابط Google Apps Script</p><input id="googleURLInput" type="url" placeholder="https://script.google.com/macros/s/..." value="${setupData.googleURL}" class="w-full p-3 border-2 border-pink-100 rounded-2xl text-xs focus:outline-none"/>`;
+      }
+      function nextStep() {
+        if (currentStep === 1) {
+          setupData.shopName = document
+            .getElementById("shopNameInput")
+            .value.trim();
+          showSetupStep(2);
+        } else if (currentStep === 2) {
+          const nm = document.getElementById("managerNameInput").value.trim(),
+            p = document.getElementById("managerPinInput").value.trim();
+          if (!nm || !p || p.length < 4) {
+            toast("أدخل اسم وكود 4+ أرقام", "error");
+            return;
+          }
+          setupData.managerName = nm;
+          setupData.managerPin = p;
+          showSetupStep(3);
+        } else {
+          setupData.googleURL =
+            document.getElementById("googleURLInput")?.value.trim() || "";
+          finishSetup();
+        }
+      }
+      function prevStep() {
+        if (currentStep > 1) showSetupStep(currentStep - 1);
+      }
+      function finishSetup() {
+        if (!setupData.managerPin) {
+          toast("يجب إعداد المدير", "error");
+          return;
+        }
+        Object.assign(db, {
+          setupCompleted: true,
+          shopName: setupData.shopName || "متجر الهدايا الذهبي",
+          manager: {
+            name: setupData.managerName,
+            pin: setupData.managerPin,
+            phone: "",
+          },
+          googleSheetURL: setupData.googleURL,
+          cashRegister: 0,
+        });
+        db.products = defProducts();
+        db.suppliers = [
+          {
+            id: 1,
+            name: "مورد الهدايا",
+            phone: "0551234567",
+            address: "",
+            totalPurchases: 0,
+          },
+        ];
+        saveData();
+        toast("✅ تم الإعداد بنجاح!");
+        document.getElementById("setupScreen").classList.add("hidden");
+        showLogin();
+      }
+
+      // ====================== LOGIN ======================
+      function showLogin() {
+        document.getElementById("loginScreen").classList.remove("hidden");
+        document.getElementById("shopNameDisplay").textContent = db.shopName;
+        setTimeout(
+          () => document.getElementById("pinInputDirect")?.focus(),
+          300,
+        );
+      }
+      function showPinPad() {
+        const s = document.getElementById("pinPadSection");
+        s.classList.toggle("hidden");
+        if (!s.classList.contains("hidden")) createPinPad();
+      }
+      function createPinPad() {
+        const p = document.getElementById("pinPad");
+        if (!p) return;
+        p.innerHTML = "";
+        for (let i = 1; i <= 9; i++)
+          p.innerHTML += `<button onclick="addPin('${i}')" type="button" class="btn py-3 text-xl font-bold rounded-2xl" style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);color:#be185d;">${i}</button>`;
+        p.innerHTML += `<div></div><button onclick="addPin('0')" type="button" class="btn py-3 text-xl font-bold rounded-2xl" style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);color:#be185d;">0</button><button onclick="backspacePin()" type="button" class="btn py-3 text-xl font-bold rounded-2xl bg-red-50 text-red-600">⌫</button>`;
+      }
+      function addPin(num) {
+        if (currentPin.length < 6) {
+          currentPin += num;
+          document.getElementById("pinInput").value = "●".repeat(
+            currentPin.length,
+          );
+          sndClick();
+        }
+      }
+      function clearPin() {
+        currentPin = "";
+        document.getElementById("pinInput").value = "";
+      }
+      function backspacePin() {
+        if (currentPin.length > 0) {
+          currentPin = currentPin.slice(0, -1);
+          document.getElementById("pinInput").value = "●".repeat(
+            currentPin.length,
+          );
+          sndClick();
+        }
+      }
+      function doLogin(pin) {
+        if (!pin) {
+          toast("⚠️ أدخل الكود", "error");
+          return false;
+        }
+        const p = pin.toString();
+        if (p === (db.manager.pin || "").toString()) {
+          loginOk({ type: "manager", ...db.manager });
+          return true;
+        }
+        const w = db.workers.find((w) => (w.pin || "").toString() === p);
+        if (w) {
+          loginOk({ type: "worker", ...w });
+          return true;
+        }
+        sndErr();
+        toast("❌ كود خاطئ", "error");
+        return false;
+      }
+      function verifyLoginDirect() {
+        if (!doLogin(document.getElementById("pinInputDirect").value.trim()))
+          document.getElementById("pinInputDirect").value = "";
+      }
+      function verifyLoginPad() {
+        if (!doLogin(currentPin)) clearPin();
+      }
+      function loginOk(user) {
+        db.currentUser = user;
+        saveData();
+        document.getElementById("loginScreen").classList.add("hidden");
+        document.getElementById("mainApp").classList.remove("hidden");
+        document.getElementById("sidebarShopName").textContent = db.shopName;
+        document.getElementById("currentUserDisplay").innerHTML =
+          `<strong class="text-pink-300">${user.name}</strong><br><small class="text-purple-400">${user.type === "manager" ? "👑 مدير" : "👤 موظف"}</small>`;
+        if (db.autoSyncEnabled && db.googleSheetURL) startAutoSync();
+        activePage = 0;
+        buildSidebar();
+        loadPage(0);
+      }
+      function logout() {
+        if (confirm("تسجيل خروج؟")) {
+          stopAutoSync();
+          db.currentUser = null;
+          saveData();
+          location.reload();
+        }
+      }
+
+      // ====================== LOAD PAGE ======================
+      function loadPage(pg) {
+        activePage = pg;
+        const c = document.getElementById("mainContent");
+        c.innerHTML = "";
+        c.scrollTop = 0;
+        switch (pg) {
+          case 0:
+            pgPOS(c);
+            break;
+          case 1:
+            pgProducts(c);
+            break;
+          case 2:
+            pgDebts(c);
+            break;
+          case 3:
+            pgSuppliers(c);
+            break;
+          case 4:
+            pgReports(c);
+            break;
+          case 5:
+            pgCash(c);
+            break;
+          case 6:
+            pgSync(c);
+            break;
+          case 7:
+            pgManager(c);
+            break;
+        }
+      }
+
+      // ====================== POS ======================
+      function pgPOS(c) {
+        c.innerHTML = `<div class="mb-4"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">🎁 نقطة البيع</h1></div>
+        <div class="pos-grid">
+          <div class="gift-card p-4">
+            <input type="text" id="barcodeInput" placeholder="🔍 باركود أو اسم المنتج..." class="w-full p-3 border-2 border-dashed border-pink-300 rounded-2xl mb-3 focus:outline-none focus:border-pink-500 bg-pink-50" onkeypress="if(event.key==='Enter'){handleBarcode(this.value);this.value='';}" />
+            <div id="cartItems" class="max-h-64 overflow-auto mb-3"></div>
+            <div class="rounded-2xl p-3 mb-3" style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);">
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-gray-700">💳 الإجمالي</span>
+                <span id="totalAmount" class="text-2xl font-black" style="color:#be185d;">0 ${CURRENCY}</span>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <button onclick="completeSale(false)" class="btn py-4 text-white rounded-2xl font-bold shadow-lg" style="background:linear-gradient(135deg,#10b981,#059669);">✅ نقدي</button>
+              <button onclick="completeSale(true)" class="btn py-4 text-white rounded-2xl font-bold shadow-lg" style="background:linear-gradient(135deg,#f59e0b,#d97706);">📝 دين</button>
+            </div>
+          </div>
+          <div class="gift-card p-4">
+            <h3 class="font-bold mb-3 text-gray-700"><i class="fa-solid fa-bolt text-yellow-500"></i> اختيار سريع</h3>
+            <div class="quick-grid max-h-96 overflow-auto" id="quickProducts"></div>
+          </div>
+        </div>`;
+        renderQuick();
+        renderCart();
+        setTimeout(() => document.getElementById("barcodeInput")?.focus(), 200);
+      }
+
+      function renderQuick() {
+        const c = document.getElementById("quickProducts");
+        if (!c) return;
+        c.innerHTML = "";
+        db.products.forEach((p) => {
+          const d = document.createElement("div");
+          d.className = `product-quick-card p-2 sm:p-3 ${p.stock <= 0 ? "out-of-stock" : ""}`;
+          d.innerHTML = `<div class="text-xl mb-1">${CAT_EMOJI[p.category] || "🎁"}</div><div class="font-semibold text-xs mb-1 text-gray-800 truncate">${p.name}</div><div class="font-black text-sm" style="color:#be185d;">${p.retail} ${CURRENCY}</div><div class="text-xs ${p.stock < 10 ? "text-red-500" : "text-gray-400"} mt-0.5">مخزون: ${p.stock}</div>`;
+          if (p.stock > 0)
+            d.onclick = () => {
+              addToCart(p);
+              sndClick();
+            };
+          c.appendChild(d);
+        });
+      }
+
+      function addToCart(product) {
+        if (product.stock <= 0) {
+          sndErr();
+          toast("⚠️ غير متوفر", "error");
+          return;
+        }
+        const ex = cart.find((i) => i.id === product.id);
+        if (ex) {
+          if (ex.qty < product.stock) ex.qty++;
+          else {
+            sndErr();
+            toast("⚠️ مخزون غير كافي", "error");
+            return;
+          }
+        } else
+          cart.push({
+            id: product.id,
+            name: product.name,
+            retail: product.retail,
+            cost: product.cost || 0,
+            qty: 1,
+          });
+        renderCart();
+      }
+
+      function renderCart() {
+        const c = document.getElementById("cartItems");
+        if (!c) return;
+        if (cart.length === 0) {
+          c.innerHTML = `<div class="text-center py-6 text-gray-400"><div class="text-4xl mb-2">🛍️</div><p class="text-sm">السلة فارغة</p></div>`;
+          document.getElementById("totalAmount").textContent = `0 ${CURRENCY}`;
+          return;
+        }
+        let h = '<div class="space-y-2">';
+        cart.forEach((item, i) => {
+          const t = n(item.retail) * item.qty;
+          h += `<div class="flex justify-between items-center p-2.5 rounded-xl" style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);">
+            <div class="flex-1 min-w-0"><div class="font-semibold text-sm truncate">${item.name}</div><div class="text-xs text-gray-500">${item.retail} × ${item.qty} = <strong style="color:#be185d;">${t.toFixed(0)} ${CURRENCY}</strong></div></div>
+            <div class="flex items-center gap-1 mr-2 flex-shrink-0">
+              <button onclick="chgQty(${i},-1)" class="btn w-6 h-6 rounded-full flex items-center justify-center font-bold text-white text-xs" style="background:#be185d;">-</button>
+              <span class="font-bold w-5 text-center text-sm">${item.qty}</span>
+              <button onclick="chgQty(${i},1)" class="btn w-6 h-6 rounded-full flex items-center justify-center font-bold text-white text-xs" style="background:#9333ea;">+</button>
+              <button onclick="rmCart(${i})" class="btn w-6 h-6 rounded-full flex items-center justify-center text-red-500 bg-transparent text-xs"><i class="fa-solid fa-trash"></i></button>
+            </div></div>`;
+        });
+        h += "</div>";
+        c.innerHTML = h;
+        document.getElementById("totalAmount").textContent =
+          cart.reduce((s, i) => s + n(i.retail) * i.qty, 0).toFixed(0) +
+          ` ${CURRENCY}`;
+      }
+
+      function chgQty(i, d) {
+        const item = cart[i],
+          p = db.products.find((x) => x.id === item.id);
+        if (d > 0 && p && item.qty >= p.stock) {
+          sndErr();
+          return;
+        }
+        item.qty += d;
+        if (item.qty <= 0) cart.splice(i, 1);
+        sndClick();
+        renderCart();
+      }
+      function rmCart(i) {
+        cart.splice(i, 1);
+        renderCart();
+      }
+      function handleBarcode(v) {
+        if (!v) return;
+        v = v.trim();
+        const p =
+          db.products.find((x) => x.barcode === v) ||
+          db.products.find((x) => x.name.includes(v));
+        if (p) {
+          addToCart(p);
+          sndClick();
+        } else {
+          sndErr();
+          toast("❌ غير موجود", "error");
+        }
+      }
+
+      function completeSale(isDebt) {
+        if (cart.length === 0) {
+          sndErr();
+          toast("السلة فارغة", "error");
+          return;
+        }
+        const total = cart.reduce((s, i) => s + n(i.retail) * i.qty, 0);
+        if (isDebt) {
+          document.getElementById("debtAmount").value = total.toFixed(2);
+          document.getElementById("debtCustomer").value = "";
+          document.getElementById("debtPhone").value = "";
+          openModal("debtModal");
+        } else {
+          const saleItems = cart.map((c) => ({
+            id: c.id,
+            name: c.name,
+            retail: c.retail,
+            cost: c.cost || 0,
+            qty: c.qty,
+          }));
+          const sale = {
+            id: db.nextInvoice++,
+            date: new Date().toISOString(),
+            total,
+            cashier: db.currentUser.name,
+            items: saleItems,
+          };
+          db.sales.push(sale);
+          addTx("in", `بيع نقدي #${sale.id}`, total);
+          cart.forEach((item) => {
+            const p = db.products.find((x) => x.id === item.id);
+            if (p) p.stock -= item.qty;
+          });
+          cart = [];
+          saveData();
+          if (db.googleSheetURL) syncUp(true);
+          sndOk();
+          toast(`✅ فاتورة #${sale.id} - ${total.toFixed(0)} ${CURRENCY}`);
+          printReceipt(sale.items, total, sale.id);
+          loadPage(0);
+        }
+      }
+
+      function saveDebt(e) {
+        e.preventDefault();
+        const cust = document.getElementById("debtCustomer").value.trim(),
+          phone = document.getElementById("debtPhone").value.trim(),
+          amt = n(document.getElementById("debtAmount").value);
+        if (!cust) {
+          toast("أدخل اسم المدين", "error");
+          return;
+        }
+        if (amt <= 0) {
+          toast("مبلغ غير صالح", "error");
+          return;
+        }
+        const saleItems = cart.map((c) => ({
+          id: c.id,
+          name: c.name,
+          retail: c.retail,
+          cost: c.cost || 0,
+          qty: c.qty,
+        }));
+        db.debts.push({
+          id: Date.now(),
+          customer: cust,
+          phone,
+          amount: amt,
+          paid: 0,
+          remaining: amt,
+          date: new Date().toISOString(),
+          items: cart.map((c) => `${c.name}×${c.qty}`).join(", "),
+        });
+        db.sales.push({
+          id: db.nextInvoice++,
+          date: new Date().toISOString(),
+          total: amt,
+          cashier: db.currentUser.name,
+          type: "debt",
+          items: saleItems,
+        });
+        cart.forEach((item) => {
+          const p = db.products.find((x) => x.id === item.id);
+          if (p) p.stock -= item.qty;
+        });
+        cart = [];
+        saveData();
+        if (db.googleSheetURL) syncUp(true);
+        closeModal("debtModal");
+        sndOk();
+        toast(`✅ دين ${amt.toFixed(0)} ${CURRENCY} - ${cust}`);
+        loadPage(0);
+      }
+
+      function printReceipt(items, total, num) {
+        try {
+          const w = window.open("", "_blank", "width=400,height=600");
+          if (w) {
+            w.document.write(
+              `<html dir="rtl"><head><style>body{font-family:monospace;padding:10px;font-size:13px;}</style></head><body onload="window.print();setTimeout(()=>window.close(),500);"><div style="width:280px;margin:auto;"><div style="text-align:center;font-size:18px;font-weight:bold;margin-bottom:6px;">🎁 ${db.shopName}</div><div style="text-align:center;margin-bottom:8px;">فاتورة #${num}<br><span style="font-size:11px;">${new Date().toLocaleString("ar-DZ")}</span></div><hr>${items.map((i) => `<div style="display:flex;justify-content:space-between;margin:5px 0;"><span>${i.name} × ${i.qty}</span><span>${(n(i.retail) * i.qty).toFixed(0)}</span></div>`).join("")}<hr style="margin:8px 0;"><div style="display:flex;justify-content:space-between;font-weight:bold;font-size:15px;"><span>الإجمالي</span><span>${total.toFixed(0)} ${CURRENCY}</span></div><div style="text-align:center;margin-top:12px;font-size:11px;">شكراً لتسوقكم 🎀</div></div></body></html>`,
+            );
+            w.document.close();
+          }
+        } catch (e) {}
+      }
+
+      // ====================== PRODUCTS ======================
+      function pgProducts(c) {
+        let h = `<div class="flex flex-col sm:flex-row justify-between gap-3 mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">🎁 المنتجات (${db.products.length})</h1><button onclick="openProductModal()" class="btn-primary px-5 py-2.5 text-sm">➕ منتج جديد</button></div><div class="grid gap-3">`;
+        if (db.products.length === 0)
+          h += `<div class="text-center py-16 text-gray-400"><div class="text-5xl mb-4">📦</div><p>لا توجد منتجات</p></div>`;
+        else
+          db.products.forEach((p) => {
+            const pct =
+              n(p.cost) > 0
+                ? (((n(p.retail) - n(p.cost)) / n(p.cost)) * 100).toFixed(0)
+                : 0;
+            h += `<div class="gift-card p-4 flex flex-col sm:flex-row justify-between gap-2">
+            <div class="flex items-start gap-3 flex-1 min-w-0">
+              <div class="text-3xl flex-shrink-0">${CAT_EMOJI[p.category] || "🎁"}</div>
+              <div class="flex-1 min-w-0"><div class="font-bold text-gray-800 mb-1 truncate">${p.name}</div>
+                <div class="flex flex-wrap gap-1 text-xs"><span class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full">${p.category}</span><span class="${p.stock < 10 ? "bg-red-100 text-red-700" : "bg-purple-100 text-purple-700"} px-2 py-0.5 rounded-full">مخزون: ${p.stock}</span><span class="bg-green-100 text-green-700 px-2 py-0.5 rounded-full">ربح: ${pct}%</span></div>
+                <div class="mt-1 text-xs text-gray-500">تكلفة: ${n(p.cost)} | جملة: ${n(p.wholesale)} | <strong style="color:#be185d;">تجزئة: ${n(p.retail)} ${CURRENCY}</strong></div>
+              </div>
+            </div>
+            <div class="flex gap-2 flex-shrink-0"><button onclick="openProductModal(${p.id})" class="btn text-purple-600 px-3 py-1.5 border-2 border-purple-200 rounded-xl text-xs bg-white">✏️</button><button onclick="delProduct(${p.id})" class="btn text-red-600 px-3 py-1.5 border-2 border-red-200 rounded-xl text-xs bg-white">🗑️</button></div>
+          </div>`;
+          });
+        c.innerHTML = h + "</div>";
+      }
+
+      function openProductModal(id = null) {
+        if (id) {
+          const p = db.products.find((x) => x.id === id);
+          if (!p) return;
+          document.getElementById("modalProductTitle").textContent = "✏️ تعديل";
+          document.getElementById("prodId").value = p.id;
+          document.getElementById("prodName").value = p.name;
+          document.getElementById("prodBarcode").value = p.barcode || "";
+          document.getElementById("prodCategory").value = p.category;
+          document.getElementById("prodUnit").value = p.unit || "piece";
+          document.getElementById("prodStock").value = p.stock;
+          document.getElementById("prodCost").value = p.cost || "";
+          document.getElementById("prodWholesale").value = p.wholesale || "";
+          document.getElementById("prodRetail").value = p.retail;
+        } else {
+          document.getElementById("modalProductTitle").textContent =
+            "🎁 إضافة منتج";
+          document.getElementById("productForm").reset();
+          document.getElementById("prodId").value = "";
+        }
+        openModal("productModal");
+      }
+
+      function saveProduct(e) {
+        e.preventDefault();
+        const id = document.getElementById("prodId").value;
+        const p = {
+          id: id ? parseInt(id) : Date.now(),
+          name: document.getElementById("prodName").value.trim(),
+          barcode:
+            document.getElementById("prodBarcode").value.trim() ||
+            "BAR" + Date.now(),
+          category: document.getElementById("prodCategory").value,
+          unit: document.getElementById("prodUnit").value,
+          stock: parseInt(document.getElementById("prodStock").value) || 0,
+          cost: n(document.getElementById("prodCost").value),
+          wholesale: n(document.getElementById("prodWholesale").value),
+          retail: n(document.getElementById("prodRetail").value),
+        };
+        if (id) {
+          const idx = db.products.findIndex((x) => x.id == id);
+          if (idx >= 0) db.products[idx] = p;
+        } else db.products.push(p);
+        saveData();
+        if (db.googleSheetURL) syncUp(true);
+        closeModal("productModal");
+        toast("✅ تم الحفظ");
+        loadPage(1);
+      }
+      function delProduct(id) {
+        if (confirm("حذف المنتج؟")) {
+          db.products = db.products.filter((p) => p.id !== id);
+          saveData();
+          if (db.googleSheetURL) syncUp(true);
+          loadPage(1);
+        }
+      }
+
+      // ====================== DEBTS ======================
+      function pgDebts(c) {
+        const tot = db.debts.reduce((s, d) => s + n(d.remaining), 0);
+        let h = `<div class="flex flex-col sm:flex-row justify-between gap-3 mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">📋 الديون</h1><div class="bg-red-100 text-red-800 px-4 py-2.5 rounded-2xl font-bold text-sm">إجمالي: ${tot.toFixed(0)} ${CURRENCY}</div></div>
+        <div class="gift-card overflow-x-auto"><table class="w-full text-xs sm:text-sm"><thead><tr style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);"><th class="p-2.5 text-right">العميل</th><th class="p-2.5 text-right hidden sm:table-cell">الهاتف</th><th class="p-2.5 text-right">المبلغ</th><th class="p-2.5 text-right">المتبقي</th><th class="p-2.5 text-right">إجراء</th></tr></thead><tbody>`;
+        if (db.debts.length === 0)
+          h += `<tr><td colspan="5" class="text-center py-10 text-gray-400"><div class="text-4xl mb-2">🎉</div>لا ديون</td></tr>`;
+        else
+          db.debts.forEach((d) => {
+            h += `<tr class="border-b border-pink-50 hover:bg-pink-50"><td class="p-2.5 font-semibold">${d.customer}</td><td class="p-2.5 hidden sm:table-cell">${d.phone || "-"}</td><td class="p-2.5">${n(d.amount).toFixed(0)} ${CURRENCY}</td><td class="p-2.5 font-bold text-red-600">${n(d.remaining).toFixed(0)} ${CURRENCY}</td><td class="p-2.5"><button onclick="payDebt(${d.id})" class="btn bg-green-100 text-green-700 px-3 py-1 rounded-xl text-xs font-semibold">💰 دفع</button></td></tr>`;
+          });
+        c.innerHTML = h + "</tbody></table></div>";
+      }
+      function payDebt(id) {
+        const d = db.debts.find((x) => x.id === id);
+        if (!d) return;
+        const inp = prompt(
+          `المتبقي: ${n(d.remaining).toFixed(0)} ${CURRENCY}\nالمبلغ:`,
+        );
+        if (inp === null) return;
+        const amt = n(inp);
+        if (amt <= 0) {
+          toast("مبلغ غير صالح", "error");
+          return;
+        }
+        if (amt > d.remaining) {
+          toast("أكبر من المتبقي", "error");
+          return;
+        }
+        d.paid += amt;
+        d.remaining -= amt;
+        addTx("in", `دفع دين - ${d.customer}`, amt);
+        if (d.remaining <= 0) {
+          db.debts = db.debts.filter((x) => x.id !== id);
+          toast("🎉 سداد كامل!");
+        } else toast(`✅ دفعة ${amt} - متبقي ${d.remaining.toFixed(0)}`);
+        saveData();
+        if (db.googleSheetURL) syncUp(true);
+        loadPage(2);
+      }
+
+      // ====================== SUPPLIERS ======================
+      function pgSuppliers(c) {
+        const tot = db.suppliers.reduce((s, x) => s + n(x.totalPurchases), 0);
+        let html =
+          db.suppliers.length === 0
+            ? `<div class="text-center py-16 text-gray-400"><div class="text-5xl mb-4">🚚</div><p>لا موردين</p></div>`
+            : db.suppliers
+                .map(
+                  (s) =>
+                    `<div class="gift-card p-4"><div class="flex justify-between mb-3"><div class="flex-1 min-w-0"><h3 class="font-bold text-gray-800 truncate">${s.name}</h3>${s.phone ? `<p class="text-sm text-gray-500">📞 ${s.phone}</p>` : ""}${s.address ? `<p class="text-xs text-gray-400">📍 ${s.address}</p>` : ""}</div><button onclick="delSupplier(${s.id})" class="btn text-red-400 bg-transparent p-1"><i class="fa-solid fa-trash text-sm"></i></button></div><div class="bg-blue-50 p-3 rounded-xl mb-3"><div class="text-xs text-blue-500">المشتريات</div><div class="text-lg font-bold text-blue-800">${n(s.totalPurchases).toFixed(0)} ${CURRENCY}</div></div><div class="flex gap-2"><button onclick="openPurchaseModal(${s.id})" class="btn flex-1 py-2 text-white rounded-xl text-sm font-semibold" style="background:#059669;">➕ مشتريات</button><button onclick="editSupplier(${s.id})" class="btn bg-gray-100 px-3 py-2 rounded-xl"><i class="fa-solid fa-edit text-gray-600 text-sm"></i></button></div></div>`,
+                )
+                .join("");
+        c.innerHTML = `<div class="flex flex-col sm:flex-row justify-between gap-3 mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">🚚 الموردين</h1><div class="flex gap-2 flex-wrap"><div class="bg-blue-100 text-blue-800 px-3 py-2 rounded-2xl font-bold text-sm">${tot.toFixed(0)} ${CURRENCY}</div><button onclick="openSupplierModal()" class="btn text-white px-3 py-2 rounded-2xl font-bold text-sm" style="background:linear-gradient(135deg,#2563eb,#1d4ed8);">➕ مورد</button></div></div><div class="three-col">${html}</div>`;
+      }
+
+      function openSupplierModal(id = null) {
+        if (id) {
+          const s = db.suppliers.find((x) => x.id === id);
+          if (!s) return;
+          document.getElementById("modalSupplierTitle").textContent =
+            "✏️ تعديل";
+          document.getElementById("supplierId").value = s.id;
+          document.getElementById("supplierName").value = s.name;
+          document.getElementById("supplierPhone").value = s.phone || "";
+          document.getElementById("supplierAddress").value = s.address || "";
+        } else {
+          document.getElementById("modalSupplierTitle").textContent =
+            "🚚 إضافة مورد";
+          document.getElementById("supplierForm").reset();
+          document.getElementById("supplierId").value = "";
+        }
+        openModal("supplierModal");
+      }
+      function saveSupplier(e) {
+        e.preventDefault();
+        const id = document.getElementById("supplierId").value;
+        const s = {
+          id: id ? parseInt(id) : Date.now(),
+          name: document.getElementById("supplierName").value.trim(),
+          phone: document.getElementById("supplierPhone").value.trim(),
+          address: document.getElementById("supplierAddress").value.trim(),
+          totalPurchases: id
+            ? db.suppliers.find((x) => x.id == id)?.totalPurchases || 0
+            : 0,
+        };
+        if (id) {
+          const idx = db.suppliers.findIndex((x) => x.id == id);
+          if (idx >= 0) db.suppliers[idx] = s;
+        } else db.suppliers.push(s);
+        saveData();
+        if (db.googleSheetURL) syncUp(true);
+        closeModal("supplierModal");
+        toast("✅ تم");
+        loadPage(3);
+      }
+      function editSupplier(id) {
+        openSupplierModal(id);
+      }
+      function delSupplier(id) {
+        if (confirm("حذف المورد؟")) {
+          db.suppliers = db.suppliers.filter((s) => s.id !== id);
+          saveData();
+          if (db.googleSheetURL) syncUp(true);
+          loadPage(3);
+        }
+      }
+      function openPurchaseModal(sid) {
+        const s = db.suppliers.find((x) => x.id === sid);
+        if (!s) return;
+        document.getElementById("purchaseSupplierId").value = sid;
+        document.getElementById("purchaseSupplierName").value = s.name;
+        document.getElementById("purchaseAmount").value = "";
+        document.getElementById("purchaseNotes").value = "";
+        openModal("purchaseModal");
+      }
+      function savePurchase(e) {
+        e.preventDefault();
+        const sid = parseInt(
+            document.getElementById("purchaseSupplierId").value,
+          ),
+          amt = n(document.getElementById("purchaseAmount").value),
+          notes = document.getElementById("purchaseNotes").value.trim();
+        if (amt <= 0) {
+          toast("مبلغ غير صالح", "error");
+          return;
+        }
+        const s = db.suppliers.find((x) => x.id === sid);
+        if (!s) return;
+        s.totalPurchases = n(s.totalPurchases) + amt;
+        db.purchases.push({
+          id: Date.now(),
+          supplierId: sid,
+          supplierName: s.name,
+          amount: amt,
+          notes,
+          date: new Date().toISOString(),
+        });
+        addTx("out", `شراء من ${s.name}`, amt);
+        saveData();
+        if (db.googleSheetURL) syncUp(true);
+        closeModal("purchaseModal");
+        toast(`✅ ${amt.toFixed(0)} ${CURRENCY} من ${s.name}`);
+        loadPage(3);
+      }
+
+      // ====================== REPORTS ======================
+      function pgReports(c) {
+        if (db.currentUser?.type !== "manager") {
+          c.innerHTML = `<div class="text-center py-20"><div class="text-5xl mb-4">🔒</div><h2 class="text-xl font-bold text-gray-600">للمدير فقط</h2></div>`;
+          return;
+        }
+        const ts = db.sales.reduce((s, x) => s + n(x.total), 0),
+          tc = db.sales.reduce(
+            (s, x) =>
+              s + (x.items || []).reduce((si, i) => si + n(i.cost) * i.qty, 0),
+            0,
+          ),
+          profit = ts - tc;
+        const td = db.debts.reduce((s, x) => s + n(x.remaining), 0),
+          tp = db.suppliers.reduce((s, x) => s + n(x.totalPurchases), 0);
+        const today = new Date().toDateString(),
+          tds = db.sales.filter(
+            (s) => new Date(s.date).toDateString() === today,
+          ),
+          tt = tds.reduce((s, x) => s + n(x.total), 0);
+        const ps = {};
+        db.sales.forEach((s) =>
+          (s.items || []).forEach((i) => {
+            if (!ps[i.name]) ps[i.name] = { qty: 0, total: 0 };
+            ps[i.name].qty += i.qty;
+            ps[i.name].total += n(i.retail) * i.qty;
+          }),
+        );
+        const top5 = Object.entries(ps)
+          .sort((a, b) => b[1].qty - a[1].qty)
+          .slice(0, 5);
+        const low = db.products.filter((p) => p.stock < 10);
+        c.innerHTML = `<div class="mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">📊 التقارير</h1></div>
+        <div class="stats-grid mb-5">
+          <div class="stat-card" style="--from:#be185d;--to:#9333ea;"><div class="text-xs opacity-80">المبيعات</div><div class="text-2xl font-black">${ts.toFixed(0)}</div><div class="text-xs opacity-70">${CURRENCY}</div></div>
+          <div class="stat-card" style="--from:#10b981;--to:#059669;"><div class="text-xs opacity-80">الأرباح</div><div class="text-2xl font-black">${profit.toFixed(0)}</div><div class="text-xs opacity-70">هامش ${ts > 0 ? ((profit / ts) * 100).toFixed(1) : 0}%</div></div>
+          <div class="stat-card" style="--from:#f59e0b;--to:#d97706;"><div class="text-xs opacity-80">اليوم</div><div class="text-2xl font-black">${tt.toFixed(0)}</div><div class="text-xs opacity-70">${tds.length} فاتورة</div></div>
+          <div class="stat-card" style="--from:#ef4444;--to:#dc2626;"><div class="text-xs opacity-80">الديون</div><div class="text-2xl font-black">${td.toFixed(0)}</div><div class="text-xs opacity-70">${db.debts.length} دين</div></div>
+        </div>
+        <div class="two-col mb-5">
+          <div class="gift-card p-4"><h3 class="font-bold mb-3">🏆 الأفضل</h3>${top5.length === 0 ? '<p class="text-gray-400 text-center py-4 text-sm">لا مبيعات</p>' : `<div class="space-y-2">${top5.map((p, i) => `<div class="flex justify-between items-center p-2.5 rounded-xl" style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);"><div class="flex items-center gap-2"><span class="text-white w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs" style="background:linear-gradient(135deg,#be185d,#9333ea);">${i + 1}</span><div><div class="font-semibold text-xs">${p[0]}</div><div class="text-xs text-gray-500">${p[1].total.toFixed(0)} ${CURRENCY}</div></div></div><div class="font-black" style="color:#be185d;">${p[1].qty}</div></div>`).join("")}</div>`}</div>
+          <div class="gift-card p-4"><h3 class="font-bold mb-3">📦 إحصائيات</h3><div class="space-y-2 text-sm">${[
+            ["الفواتير", db.sales.length],
+            ["المنتجات", db.products.length],
+            ["المشتريات", tp.toFixed(0) + " " + CURRENCY],
+            ["الخزنة", db.cashRegister.toFixed(0) + " " + CURRENCY],
+          ]
+            .map(
+              (r) =>
+                `<div class="flex justify-between p-2.5 rounded-xl bg-gray-50"><span>${r[0]}</span><strong>${r[1]}</strong></div>`,
+            )
+            .join("")}</div></div>
+        </div>
+        ${low.length > 0 ? `<div class="border-2 border-red-200 p-4 rounded-2xl mb-5" style="background:linear-gradient(135deg,#fff5f5,#fff0f5);"><h3 class="font-bold mb-3 text-red-700 text-sm">⚠️ مخزون منخفض</h3><div class="grid grid-cols-2 sm:grid-cols-4 gap-2">${low.map((p) => `<div class="bg-white p-2 rounded-xl border border-red-200 text-center"><div class="text-xs font-semibold truncate">${p.name}</div><div class="font-black text-red-600 text-sm">${p.stock}</div></div>`).join("")}</div></div>` : ""}
+        <div class="gift-card p-4"><div class="flex justify-between mb-3"><h3 class="font-bold">📝 آخر العمليات</h3><button onclick="exportCSV()" class="btn bg-green-600 text-white px-3 py-1.5 rounded-xl text-xs"><i class="fa-solid fa-download"></i> تصدير</button></div><div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);"><th class="p-2 text-right">#</th><th class="p-2 text-right">التاريخ</th><th class="p-2 text-right">الكاشير</th><th class="p-2 text-right">المبلغ</th></tr></thead><tbody>${
+          db.sales.length === 0
+            ? '<tr><td colspan="4" class="text-center py-6 text-gray-400">لا مبيعات</td></tr>'
+            : db.sales
+                .slice(-15)
+                .reverse()
+                .map(
+                  (s) =>
+                    `<tr class="border-b border-pink-50"><td class="p-2 font-bold" style="color:#be185d;">#${s.id}</td><td class="p-2 text-gray-500">${fmtDate(s.date)}</td><td class="p-2">${s.cashier}</td><td class="p-2 font-bold ${s.type === "debt" ? "text-orange-600" : "text-green-600"}">${n(s.total).toFixed(0)} ${CURRENCY}</td></tr>`,
+                )
+                .join("")
+        }</tbody></table></div></div>`;
+      }
+      function exportCSV() {
+        const csv =
+          "الرقم,التاريخ,الكاشير,المبلغ,النوع\n" +
+          db.sales
+            .map(
+              (s) =>
+                `${s.id},${fmtDate(s.date)},${s.cashier},${s.total},${s.type || "نقدي"}`,
+            )
+            .join("\n");
+        dlCSV(csv, `report_${new Date().toISOString().slice(0, 10)}.csv`);
+      }
+
+      // ====================== CASH ======================
+      function pgCash(c) {
+        const isMgr = db.currentUser?.type === "manager";
+        const tin = db.transactions
+          .filter((t) => t.type === "in")
+          .reduce((s, t) => s + n(t.amount), 0);
+        const tout = db.transactions
+          .filter((t) => t.type === "out")
+          .reduce((s, t) => s + n(t.amount), 0);
+        c.innerHTML = `<div class="mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">💰 الخزنة</h1></div>
+        <div class="three-col mb-5">
+          <div class="stat-card" style="--from:#10b981;--to:#059669;"><div class="text-sm opacity-80">الرصيد</div><div class="text-3xl font-black">${db.cashRegister.toFixed(0)}</div><div class="text-xs opacity-70">${CURRENCY}</div></div>
+          <div class="stat-card" style="--from:#3b82f6;--to:#2563eb;"><div class="text-sm opacity-80">إيداعات</div><div class="text-2xl font-black">+${tin.toFixed(0)}</div></div>
+          <div class="stat-card" style="--from:#ef4444;--to:#dc2626;"><div class="text-sm opacity-80">مسحوبات</div><div class="text-2xl font-black">-${tout.toFixed(0)}</div></div>
+        </div>
+        ${isMgr ? `<div class="gift-card p-4 mb-5"><h3 class="font-bold mb-3">🔧 أدوات</h3><div class="grid grid-cols-3 gap-2"><button onclick="adjCash('set')" class="btn py-2.5 text-white rounded-xl font-bold text-sm" style="background:linear-gradient(135deg,#2563eb,#1d4ed8);">📝 تعيين</button><button onclick="adjCash('add')" class="btn py-2.5 text-white rounded-xl font-bold text-sm" style="background:linear-gradient(135deg,#10b981,#059669);">➕ إضافة</button><button onclick="adjCash('sub')" class="btn py-2.5 text-white rounded-xl font-bold text-sm" style="background:linear-gradient(135deg,#ef4444,#dc2626);">➖ سحب</button></div></div>` : `<div class="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 mb-5 text-center"><div class="text-3xl mb-2">🔒</div><p class="text-amber-800 font-semibold text-sm">للمدير فقط</p></div>`}
+        <div class="gift-card p-4"><div class="flex justify-between mb-3"><h3 class="font-bold">📋 السجل</h3><button onclick="exportTx()" class="btn bg-green-600 text-white px-3 py-1.5 rounded-xl text-xs"><i class="fa-solid fa-download"></i></button></div><div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);"><th class="p-2 text-right">التاريخ</th><th class="p-2 text-right">الوصف</th><th class="p-2 text-right">المبلغ</th><th class="p-2 text-right hidden sm:table-cell">الرصيد</th></tr></thead><tbody>${
+          db.transactions.length === 0
+            ? '<tr><td colspan="4" class="text-center py-8 text-gray-400">لا معاملات</td></tr>'
+            : db.transactions
+                .slice()
+                .reverse()
+                .slice(0, 40)
+                .map(
+                  (t) =>
+                    `<tr class="border-b border-pink-50"><td class="p-2 text-gray-500">${fmtDate(t.date)}</td><td class="p-2">${t.description}</td><td class="p-2 font-bold ${t.type === "in" ? "text-green-600" : "text-red-600"}">${t.type === "in" ? "+" : "-"}${n(t.amount).toFixed(0)}</td><td class="p-2 hidden sm:table-cell">${n(t.balanceAfter).toFixed(0)}</td></tr>`,
+                )
+                .join("")
+        }</tbody></table></div></div>`;
+      }
+      function adjCash(act) {
+        if (db.currentUser?.type !== "manager") {
+          toast("للمدير فقط", "error");
+          return;
+        }
+        if (act === "set") {
+          const v = prompt(`الحالي: ${db.cashRegister.toFixed(0)}\nالجديد:`);
+          if (v === null) return;
+          const a = n(v);
+          if (a < 0) return;
+          const d = a - db.cashRegister;
+          db.cashRegister = a;
+          db.transactions.push({
+            id: Date.now(),
+            date: new Date().toISOString(),
+            type: d >= 0 ? "in" : "out",
+            description: "تعيين يدوي",
+            amount: Math.abs(d),
+            balanceAfter: db.cashRegister,
+            user: db.currentUser.name,
+          });
+        } else if (act === "add") {
+          const v = prompt("مبلغ الإضافة:");
+          if (v === null) return;
+          const a = n(v);
+          if (a <= 0) return;
+          addTx("in", prompt("السبب:") || "إضافة يدوية", a);
+        } else {
+          const v = prompt("مبلغ السحب:");
+          if (v === null) return;
+          const a = n(v);
+          if (a <= 0) return;
+          addTx("out", prompt("السبب:") || "سحب يدوي", a);
+        }
+        saveData();
+        if (db.googleSheetURL) syncUp(true);
+        toast(`✅ الرصيد: ${db.cashRegister.toFixed(0)}`);
+        loadPage(5);
+      }
+      function exportTx() {
+        const csv =
+          "التاريخ,النوع,الوصف,المبلغ,الرصيد,المستخدم\n" +
+          db.transactions
+            .map(
+              (t) =>
+                `${fmtDate(t.date)},${t.type === "in" ? "إيداع" : "سحب"},${t.description},${t.amount},${t.balanceAfter},${t.user}`,
+            )
+            .join("\n");
+        dlCSV(csv, `transactions_${new Date().toISOString().slice(0, 10)}.csv`);
+      }
+      function dlCSV(csv, fn) {
+        const b = new Blob(["\ufeff" + csv], {
+          type: "text/csv;charset=utf-8;",
+        });
+        const u = URL.createObjectURL(b);
+        const a = document.createElement("a");
+        a.href = u;
+        a.download = fn;
+        a.click();
+        URL.revokeObjectURL(u);
+        toast("✅ تم التصدير");
+      }
+
+      // ====================== SYNC ======================
+      function pgSync(c) {
+        const ls = db.lastSyncTime ? fmtDate(db.lastSyncTime) : "لم تتم";
+        if (!db.googleSheetURL) {
+          c.innerHTML = `<div class="mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">🔄 المزامنة</h1></div><div class="gift-card p-6 text-center"><div class="text-4xl mb-3">⚠️</div><h2 class="text-lg font-bold text-gray-700 mb-3">غير مُعدة</h2><button onclick="navClick(7)" class="btn-primary px-6 py-2.5">إعداد الآن</button></div>`;
+          return;
+        }
+        c.innerHTML = `<div class="mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">🔄 المزامنة</h1></div>
+        <div class="two-col">
+          <div class="gift-card p-4">
+            <div class="flex items-center gap-3 mb-4"><i class="fa-brands fa-google text-3xl text-green-500"></i><div><h2 class="font-bold text-gray-800">Google Sheets</h2><p class="text-sm text-green-600">متصل ✓</p></div></div>
+            <div class="bg-gray-50 p-3 rounded-xl mb-3 text-sm"><span class="text-gray-500">آخر مزامنة:</span> <strong>${ls}</strong></div>
+            <div class="space-y-2">
+              <button onclick="syncUp()" class="btn w-full py-3 text-white rounded-2xl font-bold" style="background:linear-gradient(135deg,#10b981,#059669);">☁️ رفع</button>
+              <button onclick="syncDown()" class="btn w-full py-3 text-white rounded-2xl font-bold" style="background:linear-gradient(135deg,#3b82f6,#2563eb);">📥 تحميل</button>
+              <label class="flex items-center gap-3 p-3 bg-gray-50 rounded-2xl cursor-pointer"><input type="checkbox" ${db.autoSyncEnabled ? "checked" : ""} onchange="toggleAuto(this.checked)" class="w-4 h-4"/><span class="font-semibold text-sm">تلقائي (5 دقائق)</span></label>
+            </div><div id="syncStatus"></div>
+          </div>
+          <div class="gift-card p-4"><h3 class="font-bold mb-3">📊 البيانات</h3><div class="space-y-2 text-sm">${[
+            ["المنتجات", db.products.length],
+            ["المبيعات", db.sales.length],
+            ["الموظفين", db.workers.length],
+            ["الموردين", db.suppliers.length],
+            ["المعاملات", db.transactions.length],
+            ["الخزنة", db.cashRegister.toFixed(0) + " " + CURRENCY],
+          ]
+            .map(
+              (r) =>
+                `<div class="flex justify-between p-2.5 bg-gray-50 rounded-xl"><span>${r[0]}</span><strong>${r[1]}</strong></div>`,
+            )
+            .join("")}</div></div>
+        </div>`;
+      }
+
+      async function syncUp(silent = false) {
+        if (!db.googleSheetURL) {
+          if (!silent) toast("⚠️ لا رابط", "error");
+          return;
+        }
+        const st = document.getElementById("syncStatus");
+        if (st) st.innerHTML = `<div class="sync-loading">🔄 جاري...</div>`;
+        try {
+          const payload = {
+            action: "sync",
+            shopName: db.shopName || "متجر الهدايا الذهبي",
+            manager: {
+              name: db.manager?.name || "",
+              pin: (db.manager?.pin || "").toString(),
+              phone: db.manager?.phone || "",
+            },
+            cashRegister: db.cashRegister || 0,
+            nextInvoice: db.nextInvoice || 1001,
+            products: (db.products || []).map((p) => ({
+              id: p.id,
+              name: p.name || "",
+              barcode: p.barcode || "",
+              cost: n(p.cost),
+              retail: n(p.retail),
+              wholesale: n(p.wholesale),
+              stock: p.stock || 0,
+              category: p.category || "",
+              unit: p.unit || "piece",
+            })),
+            sales: (db.sales || []).map((s) => ({
+              id: s.id,
+              date: s.date || "",
+              total: n(s.total),
+              cashier: s.cashier || "",
+              type: s.type || "cash",
+              items: s.items || [],
+            })),
+            debts: (db.debts || []).map((d) => ({
+              id: d.id,
+              customer: d.customer || "",
+              phone: d.phone || "",
+              amount: n(d.amount),
+              paid: n(d.paid),
+              remaining: n(d.remaining),
+              date: d.date || "",
+              items: d.items || "",
+            })),
+            suppliers: (db.suppliers || []).map((s) => ({
+              id: s.id,
+              name: s.name || "",
+              phone: s.phone || "",
+              address: s.address || "",
+              totalPurchases: n(s.totalPurchases),
+            })),
+            workers: (db.workers || []).map((w) => ({
+              id: w.id,
+              name: w.name || "",
+              phone: w.phone || "",
+              pin: (w.pin || "").toString(),
+              role: w.role || "موظف",
+            })),
+            purchases: (db.purchases || []).map((p) => ({
+              id: p.id,
+              supplierId: p.supplierId,
+              supplierName: p.supplierName || "",
+              amount: n(p.amount),
+              notes: p.notes || "",
+              date: p.date || "",
+            })),
+            transactions: (db.transactions || []).map((t) => ({
+              id: t.id,
+              date: t.date || "",
+              type: t.type || "",
+              description: t.description || "",
+              amount: n(t.amount),
+              balanceAfter: n(t.balanceAfter),
+              user: t.user || "",
+            })),
+            timestamp: new Date().toISOString(),
+          };
+          await fetch(db.googleSheetURL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            mode: "no-cors",
+          });
+          db.lastSyncTime = new Date().toISOString();
+          saveData();
+          if (st)
+            st.innerHTML = `<div class="sync-success">✅ تمت المزامنة</div>`;
+          if (!silent) toast("✅ تمت المزامنة");
+          updateSyncInd();
+        } catch (err) {
+          if (st)
+            st.innerHTML = `<div class="sync-error">❌ فشل: ${err.message}</div>`;
+          if (!silent) toast("❌ فشلت المزامنة", "error");
+        }
+      }
+
+      async function syncDown() {
+        if (!db.googleSheetURL) {
+          toast("⚠️ لا رابط", "error");
+          return;
+        }
+        const st = document.getElementById("syncStatus");
+        if (st) st.innerHTML = `<div class="sync-loading">📥 تحميل...</div>`;
+        try {
+          const r = await fetch(db.googleSheetURL + "?action=get");
+          const d = await r.json();
+          if (d.status === "success" && d.hasData) {
+            if (
+              !confirm(
+                `استبدال البيانات؟\n${(d.products || []).length} منتج | ${(d.sales || []).length} عملية`,
+              )
+            ) {
+              if (st) st.innerHTML = `<div class="sync-error">تم الإلغاء</div>`;
+              return;
+            }
+            if (d.shopName) db.shopName = d.shopName;
+            if (d.manager?.name)
+              db.manager = {
+                name: d.manager.name,
+                pin: String(d.manager.pin || ""),
+                phone: d.manager.phone || "",
+              };
+            if (d.cashRegister !== undefined)
+              db.cashRegister = n(d.cashRegister);
+            [
+              "products",
+              "sales",
+              "debts",
+              "suppliers",
+              "workers",
+              "purchases",
+              "transactions",
+            ].forEach((k) => {
+              if (d[k]) db[k] = d[k];
+            });
+            if (d.nextInvoice) db.nextInvoice = d.nextInvoice;
+            db.lastSyncTime = new Date().toISOString();
+            saveData();
+            if (st)
+              st.innerHTML = `<div class="sync-success">✅ تم التحميل!</div>`;
+            toast("✅ تم تحميل البيانات");
+            loadPage(activePage);
+          } else {
+            if (st) st.innerHTML = `<div class="sync-error">⚠️ لا بيانات</div>`;
+            toast("لا بيانات", "error");
+          }
+        } catch (err) {
+          if (st)
+            st.innerHTML = `<div class="sync-error">❌ ${err.message}</div>`;
+          toast("❌ فشل", "error");
+        }
+      }
+
+      function toggleAuto(on) {
+        db.autoSyncEnabled = on;
+        saveData();
+        if (on) {
+          startAutoSync();
+          toast("✅ تلقائي مفعّل");
+        } else {
+          stopAutoSync();
+          toast("⏸️ موقف", "info");
+        }
+      }
+      function startAutoSync() {
+        stopAutoSync();
+        if (db.googleSheetURL)
+          syncInterval = setInterval(() => syncUp(true), 5 * 60 * 1000);
+        updateSyncInd();
+      }
+      function stopAutoSync() {
+        if (syncInterval) {
+          clearInterval(syncInterval);
+          syncInterval = null;
+        }
+      }
+      function updateSyncInd() {
+        const el = document.getElementById("syncIndicator");
+        if (!el) return;
+        if (db.autoSyncEnabled) el.innerHTML = "🔄 تلقائي";
+        else if (db.lastSyncTime)
+          el.innerHTML = `آخر: ${Math.floor((Date.now() - new Date(db.lastSyncTime)) / 60000)}د`;
+        else el.innerHTML = "";
+      }
+
+      // ====================== MANAGER ======================
+      function pgManager(c) {
+        if (db.currentUser?.type !== "manager") {
+          c.innerHTML = `<div class="text-center py-20"><div class="text-5xl mb-4">🔒</div><h2 class="text-xl font-bold text-gray-600">للمدير فقط</h2></div>`;
+          return;
+        }
+        c.innerHTML = `<div class="mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">👑 لوحة المدير</h1></div>
+        ${db.googleSheetURL ? `<div class="setup-link-box mb-5"><div class="font-bold mb-2">🔗 مشاركة:</div><button onclick="genLink()" class="btn w-full bg-white py-2.5 rounded-xl font-bold" style="color:#be185d;">📋 نسخ رابط الإعداد</button></div>` : ""}
+        <div class="two-col">
+          <div class="gift-card p-4"><h3 class="font-bold mb-3">⚙️ الإعدادات</h3>
+            <button onclick="chgName()" class="btn w-full mb-2 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-sm font-semibold">🏪 اسم المتجر</button>
+            <button onclick="chgPin()" class="btn w-full mb-2 py-2.5 bg-red-50 text-red-700 rounded-xl text-sm font-semibold">🔑 كود المدير</button>
+            <button onclick="chgURL()" class="btn w-full mb-2 py-2.5 bg-green-50 text-green-700 rounded-xl text-sm font-semibold">☁️ رابط Google</button>
+            <button onclick="resetAll()" class="btn w-full py-2.5 bg-gray-50 text-gray-600 rounded-xl text-sm font-semibold">🗑️ مسح الكل</button>
+          </div>
+          <div class="gift-card p-4"><div class="flex justify-between items-center mb-3"><h3 class="font-bold">👥 الموظفين (${db.workers.length})</h3><button onclick="openWorkerModal()" class="btn-primary px-3 py-1.5 text-sm">➕</button></div><div id="workersList" class="space-y-2 max-h-72 overflow-auto"></div></div>
+        </div>`;
+        renderWorkers();
+      }
+      function renderWorkers() {
+        const c = document.getElementById("workersList");
+        if (!c) return;
+        if (db.workers.length === 0) {
+          c.innerHTML =
+            '<div class="text-center py-4 text-gray-400 text-sm">لا موظفين</div>';
+          return;
+        }
+        c.innerHTML = db.workers
+          .map(
+            (w, i) =>
+              `<div class="flex justify-between items-center p-2.5 rounded-xl" style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);"><div class="flex-1 min-w-0"><div class="font-semibold text-sm">${w.name}</div><div class="text-xs text-gray-500">كود: ${"●".repeat((w.pin || "").toString().length)}</div></div><div class="flex gap-1"><button onclick="editWorker(${i})" class="btn text-blue-600 px-2 py-1 border border-blue-200 rounded-lg text-xs bg-white">تعديل</button><button onclick="rmWorker(${i})" class="btn text-red-600 px-2 py-1 border border-red-200 rounded-lg text-xs bg-white">حذف</button></div></div>`,
+          )
+          .join("");
+      }
+      function openWorkerModal(idx = null) {
+        if (idx !== null && idx !== undefined) {
+          const w = db.workers[idx];
+          if (!w) return;
+          document.getElementById("modalWorkerTitle").textContent = "✏️ تعديل";
+          document.getElementById("workerId").value = idx;
+          document.getElementById("workerName").value = w.name;
+          document.getElementById("workerPhone").value = w.phone || "";
+          document.getElementById("workerPin").value = w.pin;
+        } else {
+          document.getElementById("modalWorkerTitle").textContent = "👤 إضافة";
+          document.getElementById("workerForm").reset();
+          document.getElementById("workerId").value = "";
+        }
+        openModal("workerModal");
+      }
+      function saveWorker(e) {
+        e.preventDefault();
+        const idx = document.getElementById("workerId").value,
+          pin = document.getElementById("workerPin").value.trim();
+        if (pin.length < 4) {
+          toast("4 أرقام على الأقل", "error");
+          return;
+        }
+        if (pin === db.manager.pin.toString()) {
+          toast("مستخدم من المدير", "error");
+          return;
+        }
+        const dup = db.workers.find(
+          (w, i) => w.pin.toString() === pin && i.toString() !== idx,
+        );
+        if (dup) {
+          toast("مستخدم من موظف آخر", "error");
+          return;
+        }
+        const w = {
+          id: (idx !== "" ? db.workers[parseInt(idx)]?.id : null) || Date.now(),
+          name: document.getElementById("workerName").value.trim(),
+          phone: document.getElementById("workerPhone").value.trim(),
+          pin,
+          role: "موظف",
+        };
+        if (idx !== "") db.workers[parseInt(idx)] = w;
+        else db.workers.push(w);
+        saveData();
+        if (db.googleSheetURL) syncUp(true);
+        closeModal("workerModal");
+        toast("✅ تم");
+        loadPage(7);
+      }
+      function editWorker(i) {
+        openWorkerModal(i);
+      }
+      function rmWorker(i) {
+        if (confirm(`حذف ${db.workers[i]?.name}؟`)) {
+          db.workers.splice(i, 1);
+          saveData();
+          if (db.googleSheetURL) syncUp(true);
+          loadPage(7);
+        }
+      }
+      function chgName() {
+        const v = prompt("اسم المتجر:", db.shopName);
+        if (v && v.trim()) {
+          db.shopName = v.trim();
+          document.getElementById("sidebarShopName").textContent = db.shopName;
+          saveData();
+          toast("✅ تم");
+          loadPage(7);
+        }
+      }
+      function chgPin() {
+        const v = prompt("كود جديد (4+):");
+        if (v && v.length >= 4) {
+          db.manager.pin = v;
+          saveData();
+          if (db.googleSheetURL) syncUp(true);
+          toast("✅ تم");
+        } else if (v) toast("4 أرقام على الأقل", "error");
+      }
+      function chgURL() {
+        const v = prompt("رابط Google:", db.googleSheetURL);
+        if (v === null) return;
+        if (v && v.startsWith("https://script.google.com")) {
+          db.googleSheetURL = v;
+          saveData();
+          toast("✅ تم");
+          loadPage(7);
+        } else if (v === "") {
+          db.googleSheetURL = "";
+          saveData();
+          toast("تم الإزالة", "info");
+          loadPage(7);
+        } else if (v) toast("رابط غير صالح", "error");
+      }
+      function genLink() {
+        if (!db.googleSheetURL) {
+          toast("أعد رابط Google أولاً", "error");
+          return;
+        }
+        const l = `${location.origin + location.pathname}?sheet=${encodeURIComponent(db.googleSheetURL)}&autoSetup=true`;
+        navigator.clipboard
+          .writeText(l)
+          .then(() => toast("✅ تم النسخ"))
+          .catch(() => prompt("انسخ:", l));
+      }
+      function resetAll() {
+        if (confirm("⚠️ مسح جميع البيانات؟") && confirm("تأكيد نهائي!")) {
+          localStorage.removeItem("giftShopDB");
+          location.reload();
+        }
+      }
+
+      // ====================== MODAL UTILS ======================
+      function openModal(id) {
+        document.getElementById(id).classList.add("show");
+      }
+      function closeModal(id) {
+        document.getElementById(id).classList.remove("show");
+      }
+      window.onclick = function (e) {
+        if (e.target.classList.contains("modal"))
+          e.target.classList.remove("show");
+      };
+
+      setInterval(updateSyncInd, 60000);
+      document.addEventListener("gesturestart", (e) => e.preventDefault());
+    </script>
+  </body>
+</html>
