@@ -9,6 +9,10 @@
     <title>متجر الهدايا الذهبي - POS Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap");
       * {
@@ -593,12 +597,13 @@
       }
       
       function encryptPIN(pin) {
-        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+        // Simple reversible encryption for PINs
+        const key = "giftshop_secure_key_2024";
         let encrypted = "";
         for (let i = 0; i < pin.length; i++) {
-          const shift = (i * 7 + 13) % chars.length;
           const charCode = pin.charCodeAt(i);
-          encrypted += chars[(charCode + shift) % chars.length];
+          const keyChar = key.charCodeAt(i % key.length);
+          encrypted += String.fromCharCode((charCode + keyChar) % 128);
         }
         return btoa(encrypted);
       }
@@ -606,16 +611,20 @@
       function decryptPIN(encryptedPin) {
         try {
           const decrypted = atob(encryptedPin);
-          const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+          const key = "giftshop_secure_key_2024";
           let original = "";
           for (let i = 0; i < decrypted.length; i++) {
-            const shift = (i * 7 + 13) % chars.length;
-            const charIndex = chars.indexOf(decrypted[i]);
-            const originalCharCode = (charIndex - shift + chars.length) % chars.length;
+            const charCode = decrypted.charCodeAt(i);
+            const keyChar = key.charCodeAt(i % key.length);
+            let originalCharCode = charCode - keyChar;
+            if (originalCharCode < 0) originalCharCode += 128;
             original += String.fromCharCode(originalCharCode);
           }
           return original;
-        } catch(e) { return encryptedPin; }
+        } catch(e) { 
+          // If decryption fails, return as-is (might be plain text from old data)
+          return encryptedPin; 
+        }
       }
       
       function n(v) { const x = parseFloat(v); return isNaN(x) ? 0 : x; }
@@ -691,6 +700,34 @@
         checkConnectivity();
         setupAutoSyncOnOnline();
 
+        // Handle QR code configuration
+        const configParam = params.get("config");
+        if (configParam) {
+          try {
+            const decodedConfig = decodeURIComponent(atob(configParam));
+            const configData = JSON.parse(decodedConfig);
+            
+            if (confirm("🔗 إعداد تلقائي من جهاز آخر\n\nالمتجر: " + (configData.shopName||'غير معروف') + "\nالمدير: " + (configData.managerName||'غير معروف') + "\n\nهل تريد تطبيق هذه الإعدادات؟")) {
+              db.shopName = configData.shopName || db.shopName;
+              db.googleSheetURL = configData.googleSheetURL || db.googleSheetURL;
+              db.autoSyncEnabled = configData.autoSyncEnabled !== false;
+              db.setupCompleted = true;
+              saveData();
+              
+              if (db.googleSheetURL) {
+                await syncUp(true);
+              }
+              
+              toast("✅ تم الإعداد التلقائي بنجاح", "success", 4000);
+              showLogin();
+              return;
+            }
+          } catch(e) {
+            console.error("Config error:", e);
+            toast("⚠️ رمز QR غير صالح", "error");
+          }
+        }
+
         if (sheetURL && autoSetup==="true" && !db.setupCompleted) { await quickSetup(sheetURL); return; }
         if (sheetURL && db.setupCompleted) { db.googleSheetURL=decodeURIComponent(sheetURL); saveData(); toast("✅ تم تحديث رابط المزامنة"); showLogin(); return; }
         if (!db.setupCompleted) { document.getElementById("setupScreen").classList.remove("hidden"); showSetupStep(1); }
@@ -711,9 +748,16 @@
           }
         } catch(e) { console.log("No cloud data"); }
         ov.remove();
-        db.setupCompleted=true; db.shopName="متجر الهدايا الذهبي"; db.manager={name:"المدير",pin:"123456",phone:""};
-        db.products = defProducts(); db.suppliers=[{id:1,name:"مورد الهدايا",phone:"0551234567",address:"",totalPurchases:0}];
-        saveData(); await syncUp(true); toast("✅ كود المدير: 123456","success",5000); showLogin();
+        // Default setup with plain text PIN (will be encrypted on save)
+        db.setupCompleted=true; 
+        db.shopName="متجر الهدايا الذهبي"; 
+        db.manager={name:"المدير",pin:"123456",phone:""};
+        db.products = defProducts(); 
+        db.suppliers=[{id:1,name:"مورد الهدايا",phone:"0551234567",address:"",totalPurchases:0}];
+        saveData(); 
+        await syncUp(true); 
+        toast("✅ كود المدير الافتراضي: 123456<br><small>يمكن تغييره من لوحة المدير</small>","success",6000); 
+        showLogin();
       }
 
       function defProducts() {
@@ -753,7 +797,20 @@
       }
 
       // ====================== LOGIN ======================
-      function showLogin() { document.getElementById("loginScreen").classList.remove("hidden"); document.getElementById("shopNameDisplay").textContent=db.shopName; setTimeout(()=>document.getElementById("pinInputDirect")?.focus(),300); }
+      function showLogin() { 
+        document.getElementById("loginScreen").classList.remove("hidden"); 
+        document.getElementById("shopNameDisplay").textContent = db.shopName; 
+        // Clear any previous input
+        const pinInput = document.getElementById("pinInputDirect");
+        if (pinInput) {
+          pinInput.value = "";
+          pinInput.focus();
+        }
+        setTimeout(() => {
+          const p = document.getElementById("pinInputDirect");
+          if (p) p.focus();
+        }, 300); 
+      }
       function showPinPad() { const s=document.getElementById("pinPadSection"); s.classList.toggle("hidden"); if(!s.classList.contains("hidden")) createPinPad(); }
       function createPinPad() {
         const p=document.getElementById("pinPad"); if(!p)return; p.innerHTML="";
@@ -864,19 +921,113 @@
       function completeSale(isDebt) {
         if(cart.length===0){sndErr();toast("السلة فارغة","error");return;}
         const total=cart.reduce((s,i)=>s+n(i.retail)*i.qty,0);
-        if(isDebt){document.getElementById("debtAmount").value=total.toFixed(2);document.getElementById("debtCustomer").value="";document.getElementById("debtPhone").value="";openModal("debtModal");}
-        else {
-          const saleItems=cart.map(c=>({id:c.id,name:c.name,retail:c.retail,cost:c.cost||0,qty:c.qty}));
-          const sale={id:db.nextInvoice++,date:new Date().toISOString(),total,cashier:db.currentUser.name,items:saleItems};
-          db.sales.push(sale);
-          addTx("in",`بيع نقدي #${sale.id}`,total);
-          cart.forEach(item=>{const p=db.products.find(x=>x.id===item.id);if(p)p.stock-=item.qty;});
-          cart=[]; saveData();
-          if(db.googleSheetURL)syncUp(true);
-          sndOk(); toast(`✅ فاتورة #${sale.id} - ${total.toFixed(0)} ${CURRENCY}`);
-          printReceipt(sale.items,total,sale.id);
-          loadPage(0);
+        
+        // Show change calculation popup for cash sales
+        if(!isDebt) {
+          showChangePopup(total, () => {
+            // Confirmed - proceed with sale
+            finalizeSale(false, total);
+          });
+          return;
         }
+        
+        // For debt sales, show the debt modal directly
+        document.getElementById("debtAmount").value=total.toFixed(2);
+        document.getElementById("debtCustomer").value="";
+        document.getElementById("debtPhone").value="";
+        openModal("debtModal");
+      }
+      
+      function showChangePopup(total, onConfirm) {
+        const modal = document.createElement('div');
+        modal.className = 'modal show';
+        modal.id = 'changePopup';
+        modal.innerHTML = `
+          <div class="modal-content">
+            <div class="p-4 sm:p-6 rounded-t-3xl flex justify-between items-center" style="background:linear-gradient(135deg,#10b981,#059669)">
+              <h3 class="text-lg font-bold text-white">💰 حساب الباقي</h3>
+              <button onclick="closeChangePopup()" class="btn text-white text-2xl bg-transparent">&times;</button>
+            </div>
+            <div class="p-4 sm:p-6">
+              <div class="text-center mb-4">
+                <div class="text-sm text-gray-600 mb-1">المبلغ المطلوب</div>
+                <div class="text-3xl font-black" style="color:#10b981;">${total.toFixed(2)} ${CURRENCY}</div>
+              </div>
+              <div class="mb-4">
+                <label class="block text-sm font-semibold mb-2 text-gray-700">ما هو المبلغ المستلم؟</label>
+                <input type="number" id="receivedAmount" step="0.01" inputmode="decimal" 
+                  class="w-full p-4 text-center text-2xl border-2 border-green-200 rounded-2xl focus:border-green-500 outline-none bg-green-50 font-bold"
+                  placeholder="0.00" oninput="calculateChange(${total})" />
+              </div>
+              <div id="changeResult" class="hidden mb-4 p-4 rounded-2xl bg-blue-50 border-2 border-blue-200">
+                <div class="text-sm text-blue-700 mb-1">الباقي للعميل</div>
+                <div id="changeValue" class="text-3xl font-black text-blue-600">0.00 ${CURRENCY}</div>
+              </div>
+              <div class="flex gap-3 mt-6">
+                <button onclick="closeChangePopup()" class="btn flex-1 py-3 bg-gray-100 rounded-xl font-semibold text-gray-700">إلغاء</button>
+                <button onclick="confirmSale()" class="btn flex-1 py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg">✅ تأكيد وطباعة</button>
+              </div>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        setTimeout(() => document.getElementById('receivedAmount')?.focus(), 100);
+        window.confirmSaleCallback = onConfirm;
+      }
+      
+      function closeChangePopup() {
+        const modal = document.getElementById('changePopup');
+        if (modal) {
+          modal.remove();
+        }
+        window.confirmSaleCallback = null;
+      }
+      
+      function calculateChange(total) {
+        const received = parseFloat(document.getElementById('receivedAmount').value) || 0;
+        const resultDiv = document.getElementById('changeResult');
+        const changeValue = document.getElementById('changeValue');
+        
+        if (received >= total && received > 0) {
+          const change = received - total;
+          changeValue.textContent = change.toFixed(2) + ' ' + CURRENCY;
+          resultDiv.classList.remove('hidden');
+          resultDiv.className = 'mb-4 p-4 rounded-2xl bg-green-50 border-2 border-green-200';
+        } else if (received > 0) {
+          changeValue.textContent = 'غير كافٍ';
+          resultDiv.classList.remove('hidden');
+          resultDiv.className = 'mb-4 p-4 rounded-2xl bg-red-50 border-2 border-red-200';
+        } else {
+          resultDiv.classList.add('hidden');
+        }
+      }
+      
+      function confirmSale() {
+        const received = parseFloat(document.getElementById('receivedAmount').value) || 0;
+        const total = cart.reduce((s,i)=>s+n(i.retail)*i.qty,0);
+        
+        if (received < total) {
+          toast('⚠️ المبلغ غير كافٍ', 'error');
+          return;
+        }
+        
+        closeChangePopup();
+        if (window.confirmSaleCallback) {
+          window.confirmSaleCallback();
+        }
+      }
+      
+      function finalizeSale(isDebt, total) {
+        const saleItems=cart.map(c=>({id:c.id,name:c.name,retail:c.retail,cost:c.cost||0,qty:c.qty}));
+        const sale={id:db.nextInvoice++,date:new Date().toISOString(),total,cashier:db.currentUser.name,items:saleItems};
+        db.sales.push(sale);
+        addTx("in",`بيع نقدي #${sale.id}`,total);
+        cart.forEach(item=>{const p=db.products.find(x=>x.id===item.id);if(p)p.stock-=item.qty;});
+        cart=[]; saveData();
+        if(db.googleSheetURL)syncUp(true);
+        sndOk(); toast(`✅ فاتورة #${sale.id} - ${total.toFixed(0)} ${CURRENCY}`);
+        printReceipt(sale.items,total,sale.id);
+        loadPage(0);
       }
 
       function saveDebt(e) {
@@ -908,17 +1059,8 @@
             </div>
           `;
           
-          // Use autoPrintReceipt for silent printing without popup
-          if (db.printerConfig && db.printerConfig.billPrinter) {
-            autoPrintReceipt(receiptHTML);
-          } else {
-            // Fallback to traditional method if no printer detected
-            const w=window.open("","_blank","width=400,height=600");
-            if(w){
-              w.document.write(`<html dir="rtl"><head><style>body{font-family:'Tajawal',monospace;padding:10px;font-size:13px;}@media print{@page{margin:0;size:auto;}body{margin:0;}}</style></head><body onload="window.print();setTimeout(()=>window.close(),500);">${receiptHTML}</body></html>`);
-              w.document.close();
-            }
-          }
+          // Always use autoPrintReceipt for silent printing without popup
+          autoPrintReceipt(receiptHTML);
         } catch(e) {}
       }
 
@@ -1011,9 +1153,139 @@
           <div class="gift-card p-4"><h3 class="font-bold mb-3">📦 إحصائيات</h3><div class="space-y-2 text-sm">${[['الفواتير',db.sales.length],['المنتجات',db.products.length],['المشتريات',tp.toFixed(0)+' '+CURRENCY],['الخزنة',db.cashRegister.toFixed(0)+' '+CURRENCY]].map(r=>`<div class="flex justify-between p-2.5 rounded-xl bg-gray-50"><span>${r[0]}</span><strong>${r[1]}</strong></div>`).join('')}</div></div>
         </div>
         ${low.length>0?`<div class="border-2 border-red-200 p-4 rounded-2xl mb-5" style="background:linear-gradient(135deg,#fff5f5,#fff0f5);"><h3 class="font-bold mb-3 text-red-700 text-sm">⚠️ مخزون منخفض</h3><div class="grid grid-cols-2 sm:grid-cols-4 gap-2">${low.map(p=>`<div class="bg-white p-2 rounded-xl border border-red-200 text-center"><div class="text-xs font-semibold truncate">${p.name}</div><div class="font-black text-red-600 text-sm">${p.stock}</div></div>`).join('')}</div></div>`:''}
-        <div class="gift-card p-4"><div class="flex justify-between mb-3"><h3 class="font-bold">📝 آخر العمليات</h3><button onclick="exportCSV()" class="btn bg-green-600 text-white px-3 py-1.5 rounded-xl text-xs"><i class="fa-solid fa-download"></i> تصدير</button></div><div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);"><th class="p-2 text-right">#</th><th class="p-2 text-right">التاريخ</th><th class="p-2 text-right">الكاشير</th><th class="p-2 text-right">المبلغ</th></tr></thead><tbody>${db.sales.length===0?'<tr><td colspan="4" class="text-center py-6 text-gray-400">لا مبيعات</td></tr>':db.sales.slice(-15).reverse().map(s=>`<tr class="border-b border-pink-50"><td class="p-2 font-bold" style="color:#be185d;">#${s.id}</td><td class="p-2 text-gray-500">${fmtDate(s.date)}</td><td class="p-2">${s.cashier}</td><td class="p-2 font-bold ${s.type==='debt'?'text-orange-600':'text-green-600'}">${n(s.total).toFixed(0)} ${CURRENCY}</td></tr>`).join('')}</tbody></table></div></div>`;
+        <div class="gift-card p-4"><div class="flex justify-between mb-3"><h3 class="font-bold">📝 آخر العمليات</h3><div class="flex gap-2"><button onclick="generatePDFReport()" class="btn bg-red-600 text-white px-3 py-1.5 rounded-xl text-xs"><i class="fa-solid fa-file-pdf"></i> PDF</button><button onclick="exportCSV()" class="btn bg-green-600 text-white px-3 py-1.5 rounded-xl text-xs"><i class="fa-solid fa-download"></i> تصدير</button></div></div><div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);"><th class="p-2 text-right">#</th><th class="p-2 text-right">التاريخ</th><th class="p-2 text-right">الكاشير</th><th class="p-2 text-right">المبلغ</th></tr></thead><tbody>${db.sales.length===0?'<tr><td colspan="4" class="text-center py-6 text-gray-400">لا مبيعات</td></tr>':db.sales.slice(-15).reverse().map(s=>`<tr class="border-b border-pink-50"><td class="p-2 font-bold" style="color:#be185d;">#${s.id}</td><td class="p-2 text-gray-500">${fmtDate(s.date)}</td><td class="p-2">${s.cashier}</td><td class="p-2 font-bold ${s.type==='debt'?'text-orange-600':'text-green-600'}">${n(s.total).toFixed(0)} ${CURRENCY}</td></tr>`).join('')}</tbody></table></div></div>`;
       }
       function exportCSV(){const csv="الرقم,التاريخ,الكاشير,المبلغ,النوع\n"+db.sales.map(s=>`${s.id},${fmtDate(s.date)},${s.cashier},${s.total},${s.type||'نقدي'}`).join("\n");dlCSV(csv,`report_${new Date().toISOString().slice(0,10)}.csv`);}
+      
+      // PDF Report Generation with Charts - Arabic
+      async function generatePDFReport() {
+        if(db.currentUser?.type!=="manager"){toast("للمدير فقط","error");return;}
+        
+        toast("🔄 جاري إنشاء التقرير...", "info", 3000);
+        
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+        
+        // Add Arabic font support (using default for now)
+        doc.setFontSize(18);
+        doc.text('تقرير شامل - ' + db.shopName, 105, 20, null, null, 'center');
+        doc.setFontSize(10);
+        doc.text('تاريخ التقرير: ' + new Date().toLocaleString('ar-DZ'), 105, 28, null, null, 'center');
+        
+        // Summary statistics
+        const totalSales = db.sales.reduce((s,x)=>s+parseFloat(x.total),0);
+        const totalCost = db.sales.reduce((s,x)=>s+(x.items||[]).reduce((si,i)=>si+(i.cost||0)*i.qty,0),0);
+        const profit = totalSales - totalCost;
+        const totalDebts = db.debts.reduce((s,x)=>s+parseFloat(x.remaining||0),0);
+        const totalPurchases = db.suppliers.reduce((s,x)=>s+parseFloat(x.totalPurchases||0),0);
+        
+        let y = 40;
+        doc.setFillColor(236, 72, 153);
+        doc.rect(20, y-5, 170, 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(12);
+        doc.text('ملخص الأداء العام', 105, y, null, null, 'center');
+        
+        y += 15;
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(10);
+        const stats = [
+          ['إجمالي المبيعات', totalSales.toFixed(2) + ' دج'],
+          ['صافي الأرباح', profit.toFixed(2) + ' دج'],
+          ['هامش الربح', (totalSales>0?((profit/totalSales)*100).toFixed(1):0) + '%'],
+          ['الديون المتبقية', totalDebts.toFixed(2) + ' دج'],
+          ['عدد الفواتير', db.sales.length.toString()],
+          ['عدد المنتجات', db.products.length.toString()],
+          ['عدد الموظفين', db.workers.length.toString()],
+          ['رصيد الخزنة', db.cashRegister.toFixed(2) + ' دج']
+        ];
+        
+        doc.autoTable({
+          startY: y,
+          head: [['البيان', 'القيمة']],
+          body: stats,
+          theme: 'striped',
+          headStyles: { fillColor: [190, 24, 93] },
+          styles: { fontSize: 9, cellPadding: 2 },
+          columnStyles: { 0: { fontStyle: 'bold' } }
+        });
+        
+        // Top products
+        const ps={};db.sales.forEach(s=>(s.items||[]).forEach(i=>{if(!ps[i.name])ps[i.name]={qty:0,total:0};ps[i.name].qty+=i.qty;ps[i.name].total+=parseFloat(i.retail)*i.qty;}));
+        const top5=Object.entries(ps).sort((a,b)=>b[1].qty-a[1].qty).slice(0,5);
+        
+        if(top5.length > 0) {
+          doc.addPage();
+          doc.setFillColor(16, 185, 129);
+          doc.rect(20, 20-5, 170, 8, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(12);
+          doc.text('أفضل 5 منتجات مبيعاً', 105, 20, null, null, 'center');
+          
+          doc.setTextColor(0, 0, 0);
+          doc.autoTable({
+            startY: 25,
+            head: [['الترتيب', 'المنتج', 'الكمية', 'الإجمالي']],
+            body: top5.map((p,i)=>[(i+1).toString(), p[0], p[1].qty.toString(), p[1].total.toFixed(2) + ' دج']),
+            theme: 'striped',
+            headStyles: { fillColor: [16, 185, 129] },
+            styles: { fontSize: 9 }
+          });
+        }
+        
+        // Employee performance
+        if(db.workers.length > 0 && db.sales.length > 0) {
+          doc.addPage();
+          doc.setFillColor(59, 130, 246);
+          doc.rect(20, 20-5, 170, 8, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(12);
+          doc.text('أداء الموظفين', 105, 20, null, null, 'center');
+          
+          const empStats = {};
+          db.sales.forEach(s => {
+            if(!empStats[s.cashier]) empStats[s.cashier] = { count: 0, total: 0 };
+            empStats[s.cashier].count++;
+            empStats[s.cashier].total += parseFloat(s.total);
+          });
+          
+          doc.setTextColor(0, 0, 0);
+          doc.autoTable({
+            startY: 25,
+            head: [['الموظف', 'عدد المبيعات', 'إجمالي المبيعات']],
+            body: Object.entries(empStats).map(([name, data]) => [name, data.count.toString(), data.total.toFixed(2) + ' دج']),
+            theme: 'striped',
+            headStyles: { fillColor: [59, 130, 246] },
+            styles: { fontSize: 9 }
+          });
+        }
+        
+        // Low stock alert
+        const low=db.products.filter(p=>p.stock<10);
+        if(low.length > 0) {
+          doc.addPage();
+          doc.setFillColor(239, 68, 68);
+          doc.rect(20, 20-5, 170, 8, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(12);
+          doc.text('⚠️ مخزون منخفض', 105, 20, null, null, 'center');
+          
+          doc.setTextColor(0, 0, 0);
+          doc.autoTable({
+            startY: 25,
+            head: [['المنتج', 'المخزون الحالي']],
+            body: low.map(p => [p.name, p.stock.toString()]),
+            theme: 'striped',
+            headStyles: { fillColor: [239, 68, 68] },
+            styles: { fontSize: 9 }
+          });
+        }
+        
+        // Save PDF
+        doc.save(`تقرير_${db.shopName}_${new Date().toISOString().slice(0,10)}.pdf`);
+        toast("✅ تم تحميل التقرير PDF", "success", 3000);
+      }
+
 
       // ====================== CASH ======================
       function pgCash(c) {
@@ -1171,7 +1443,7 @@
       function pgManager(c) {
         if(db.currentUser?.type!=="manager"){c.innerHTML=`<div class="text-center py-20"><div class="text-5xl mb-4">🔒</div><h2 class="text-xl font-bold text-gray-600">للمدير فقط</h2></div>`;return;}
         c.innerHTML=`<div class="mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">👑 لوحة المدير</h1></div>
-        ${db.googleSheetURL?`<div class="setup-link-box mb-5"><div class="font-bold mb-2">🔗 مشاركة:</div><button onclick="genLink()" class="btn w-full bg-white py-2.5 rounded-xl font-bold" style="color:#be185d;">📋 نسخ رابط الإعداد</button></div>`:''}
+        ${db.googleSheetURL?`<div class="setup-link-box mb-5"><div class="font-bold mb-2">🔗 مشاركة الإعدادات:</div><div class="flex gap-2"><button onclick="genLink()" class="btn flex-1 bg-white py-2.5 rounded-xl font-bold" style="color:#be185d;">📋 نسخ الرابط</button><button onclick="generateQRCode()" class="btn flex-1 bg-white py-2.5 rounded-xl font-bold" style="color:#be185d;">📱 QR Code</button></div></div>`:''}
         <div class="two-col">
           <div class="gift-card p-4"><h3 class="font-bold mb-3">⚙️ الإعدادات العامة</h3>
             <button onclick="openConfigPanel()" class="btn w-full mb-2 py-2.5 bg-purple-50 text-purple-700 rounded-xl text-sm font-semibold">🎛️ لوحة الإعدادات الشاملة</button>
@@ -1185,12 +1457,59 @@
         renderWorkers();
       }
       
+      // Generate QR Code for auto-configuration
+      function generateQRCode() {
+        if(!db.googleSheetURL){toast("أعد رابط Google أولاً","error");return;}
+        
+        const configData = {
+          shopName: db.shopName,
+          managerName: db.manager?.name,
+          googleSheetURL: db.googleSheetURL,
+          autoSyncEnabled: db.autoSyncEnabled
+        };
+        
+        const configStr = JSON.stringify(configData);
+        const encodedData = btoa(encodeURIComponent(configStr));
+        const qrUrl = `${location.origin}${location.pathname}?config=${encodedData}`;
+        
+        // Create modal with QR code
+        const modal = document.createElement('div');
+        modal.className = 'modal show';
+        modal.id = 'qrModal';
+        modal.innerHTML = `
+          <div class="modal-content">
+            <div class="p-4 sm:p-6 rounded-t-3xl flex justify-between items-center" style="background:linear-gradient(135deg,#be185d,#9333ea)">
+              <h3 class="text-lg font-bold text-white">📱 رمز الاستجابة السريعة</h3>
+              <button onclick="document.getElementById('qrModal').remove()" class="btn text-white text-2xl bg-transparent">&times;</button>
+            </div>
+            <div class="p-4 sm:p-6 text-center">
+              <p class="text-sm text-gray-600 mb-4">امسح هذا الرمز من جهاز آخر للإعداد التلقائي</p>
+              <div id="qrcode" class="flex justify-center mb-4"></div>
+              <button onclick="navigator.clipboard.writeText('${qrUrl}').then(()=>toast('✅ تم نسخ الرابط'))" class="btn w-full py-3 bg-purple-600 text-white rounded-xl font-bold">📋 نسخ الرابط</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Generate QR code
+        setTimeout(() => {
+          new QRCode(document.getElementById('qrcode'), {
+            text: qrUrl,
+            width: 256,
+            height: 256,
+            colorDark: '#000000',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.H
+          });
+        }, 100);
+      }
+      
       // Configuration Panel Modal
       function openConfigPanel() {
         const modal = document.getElementById('configModal');
         document.getElementById('cfgShopName').value = db.shopName || '';
         document.getElementById('cfgManagerName').value = db.manager?.name || '';
-        document.getElementById('cfgManagerPin').value = db.manager?.pin || '';
+        document.getElementById('cfgManagerPin').value = db.manager?.pin || '';  // Already decrypted on load
         document.getElementById('cfgGoogleURL').value = db.googleSheetURL || '';
         document.getElementById('cfgAutoSync').checked = db.autoSyncEnabled || false;
         openModal('configModal');
@@ -1211,12 +1530,12 @@
         
         db.shopName = shopName;
         db.manager.name = mgrName;
-        db.manager.pin = mgrPin;
+        db.manager.pin = mgrPin;  // Will be encrypted by saveData()
         db.googleSheetURL = googleURL;
         db.autoSyncEnabled = autoSync;
         
         document.getElementById('sidebarShopName').textContent = db.shopName;
-        saveData();
+        saveData();  // This encrypts the PIN before saving
         
         if (autoSync && googleURL) {
           startAutoSync();
@@ -1226,7 +1545,7 @@
         }
         
         closeModal('configModal');
-        toast('✅ تم حفظ الإعدادات بنجاح', 'success', 4000);
+        toast('✅ تم حفظ الإعدادات بنجاح<br><small>كود المدير الجديد: ' + mgrPin + '</small>', 'success', 5000);
         loadPage(7);
       }
       
@@ -1236,6 +1555,36 @@
         localStorage.removeItem('giftShopDB');
         location.reload();
       }
+      
+      // Emergency reset function - can be called from console: emergencyReset()
+      window.emergencyReset = function() {
+        const saved = localStorage.getItem('giftShopDB');
+        if (!saved) {
+          console.log('No data to reset');
+          return false;
+        }
+        try {
+          const dbData = JSON.parse(saved);
+          // Reset manager PIN to default while keeping other data
+          dbData.manager.pin = '123456';
+          // Re-encrypt with new encryption
+          const key = "giftshop_secure_key_2024";
+          let encrypted = "";
+          for (let i = 0; i < dbData.manager.pin.length; i++) {
+            const charCode = dbData.manager.pin.charCodeAt(i);
+            const keyChar = key.charCodeAt(i % key.length);
+            encrypted += String.fromCharCode((charCode + keyChar) % 128);
+          }
+          dbData.manager.pin = btoa(encrypted);
+          localStorage.setItem('giftShopDB', JSON.stringify(dbData));
+          console.log('✅ Manager PIN reset to 123456');
+          console.log('Please refresh the page and use PIN: 123456');
+          return true;
+        } catch(e) {
+          console.error('Reset failed:', e);
+          return false;
+        }
+      };
       function openWorkerModal(idx=null){if(idx!==null&&idx!==undefined){const w=db.workers[idx];if(!w)return;document.getElementById("modalWorkerTitle").textContent="✏️ تعديل";document.getElementById("workerId").value=idx;document.getElementById("workerName").value=w.name;document.getElementById("workerPhone").value=w.phone||"";document.getElementById("workerPin").value=w.pin;}else{document.getElementById("modalWorkerTitle").textContent="👤 إضافة";document.getElementById("workerForm").reset();document.getElementById("workerId").value="";}openModal("workerModal");}
       function saveWorker(e){e.preventDefault();const idx=document.getElementById("workerId").value,pin=document.getElementById("workerPin").value.trim();if(pin.length<4){toast("4 أرقام على الأقل","error");return;}if(pin===db.manager.pin.toString()){toast("مستخدم من المدير","error");return;}const dup=db.workers.find((w,i)=>w.pin.toString()===pin&&i.toString()!==idx);if(dup){toast("مستخدم من موظف آخر","error");return;}const w={id:(idx!==""?db.workers[parseInt(idx)]?.id:null)||Date.now(),name:document.getElementById("workerName").value.trim(),phone:document.getElementById("workerPhone").value.trim(),pin,role:"موظف"};if(idx!=="")db.workers[parseInt(idx)]=w;else db.workers.push(w);saveData();if(db.googleSheetURL)syncUp(true);closeModal("workerModal");toast("✅ تم");loadPage(7);}
       function editWorker(i){openWorkerModal(i);}
@@ -1243,6 +1592,19 @@
       function chgName(){const v=prompt("اسم المتجر:",db.shopName);if(v&&v.trim()){db.shopName=v.trim();document.getElementById("sidebarShopName").textContent=db.shopName;saveData();toast("✅ تم");loadPage(7);}}
       function chgPin(){const v=prompt("كود جديد (4+):");if(v&&v.length>=4){db.manager.pin=v;saveData();if(db.googleSheetURL)syncUp(true);toast("✅ تم");}else if(v)toast("4 أرقام على الأقل","error");}
       function chgURL(){const v=prompt("رابط Google:",db.googleSheetURL);if(v===null)return;if(v&&v.startsWith("https://script.google.com")){db.googleSheetURL=v;saveData();toast("✅ تم");loadPage(7);}else if(v===""){db.googleSheetURL="";saveData();toast("تم الإزالة","info");loadPage(7);}else if(v)toast("رابط غير صالح","error");}
+      
+      // Change PIN with validation - accessible from config panel
+      function updateManagerPin(newPin) {
+        if (!newPin || newPin.length < 4) {
+          toast("⚠️ كود المدير يجب أن يكون 4 أرقام على الأقل", "error");
+          return false;
+        }
+        db.manager.pin = newPin;
+        saveData();
+        if (db.googleSheetURL) syncUp(true);
+        toast("✅ تم تغيير كود المدير بنجاح", "success", 3000);
+        return true;
+      }
       function genLink(){if(!db.googleSheetURL){toast("أعد رابط Google أولاً","error");return;}const l=`${location.origin+location.pathname}?sheet=${encodeURIComponent(db.googleSheetURL)}&autoSetup=true`;navigator.clipboard.writeText(l).then(()=>toast("✅ تم النسخ")).catch(()=>prompt("انسخ:",l));}
       function resetAll(){if(confirm("⚠️ مسح جميع البيانات؟")&&confirm("تأكيد نهائي!")){localStorage.removeItem("giftShopDB");location.reload();}}
 
@@ -1275,7 +1637,10 @@
       window.onclick=function(e){if(e.target.classList.contains("modal"))e.target.classList.remove("show");};
 
       // ====================== CONNECTIVITY CHECK ======================
-      async function checkConnectivity() {
+      let lastOnlineState = navigator.onLine;
+      let lastPrinterState = null;
+
+      async function checkConnectivity(silent=false) {
         const devices = { billPrinter: false, stickerPrinter: false, barcodeScanner: false };
         
         // Check for printers using Web USB API (for desktop apps)
