@@ -597,33 +597,38 @@
       }
       
       function encryptPIN(pin) {
-        // Simple reversible encryption for PINs
+        // Simple reversible encryption for PINs - compatible across devices
+        if (!pin || typeof pin !== 'string') return "";
         const key = "giftshop_secure_key_2024";
         let encrypted = "";
         for (let i = 0; i < pin.length; i++) {
           const charCode = pin.charCodeAt(i);
           const keyChar = key.charCodeAt(i % key.length);
-          encrypted += String.fromCharCode((charCode + keyChar) % 128);
+          encrypted += String.fromCharCode(((charCode + keyChar) % 95) + 33);
         }
         return btoa(encrypted);
       }
       
       function decryptPIN(encryptedPin) {
         try {
+          if (!encryptedPin || typeof encryptedPin !== 'string') return "";
+          // Check if already decrypted (plain text number)
+          if (/^\d+$/.test(encryptedPin)) return encryptedPin;
+          
           const decrypted = atob(encryptedPin);
           const key = "giftshop_secure_key_2024";
           let original = "";
           for (let i = 0; i < decrypted.length; i++) {
             const charCode = decrypted.charCodeAt(i);
             const keyChar = key.charCodeAt(i % key.length);
-            let originalCharCode = charCode - keyChar;
-            if (originalCharCode < 0) originalCharCode += 128;
+            let originalCharCode = ((charCode - 33 - keyChar + 95) % 95) + 48;
             original += String.fromCharCode(originalCharCode);
           }
           return original;
         } catch(e) { 
           // If decryption fails, return as-is (might be plain text from old data)
-          return encryptedPin; 
+          console.log("Decryption failed, returning as-is:", encryptedPin);
+          return String(encryptedPin); 
         }
       }
       
@@ -1157,20 +1162,20 @@
       }
       function exportCSV(){const csv="الرقم,التاريخ,الكاشير,المبلغ,النوع\n"+db.sales.map(s=>`${s.id},${fmtDate(s.date)},${s.cashier},${s.total},${s.type||'نقدي'}`).join("\n");dlCSV(csv,`report_${new Date().toISOString().slice(0,10)}.csv`);}
       
-      // PDF Report Generation with Charts - Arabic
+      // PDF Report Generation with Charts - French
       async function generatePDFReport() {
         if(db.currentUser?.type!=="manager"){toast("للمدير فقط","error");return;}
         
-        toast("🔄 جاري إنشاء التقرير...", "info", 3000);
+        toast("🔄 Création du rapport...", "info", 3000);
         
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
         
         // Add Arabic font support (using default for now)
         doc.setFontSize(18);
-        doc.text('تقرير شامل - ' + db.shopName, 105, 20, null, null, 'center');
+        doc.text('Rapport Complet - ' + db.shopName, 105, 20, null, null, 'center');
         doc.setFontSize(10);
-        doc.text('تاريخ التقرير: ' + new Date().toLocaleString('ar-DZ'), 105, 28, null, null, 'center');
+        doc.text('Date du rapport: ' + new Date().toLocaleString('fr-DZ'), 105, 28, null, null, 'center');
         
         // Summary statistics
         const totalSales = db.sales.reduce((s,x)=>s+parseFloat(x.total),0);
@@ -1184,25 +1189,25 @@
         doc.rect(20, y-5, 170, 8, 'F');
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(12);
-        doc.text('ملخص الأداء العام', 105, y, null, null, 'center');
+        doc.text('Résumé des Performances', 105, y, null, null, 'center');
         
         y += 15;
         doc.setTextColor(0, 0, 0);
         doc.setFontSize(10);
         const stats = [
-          ['إجمالي المبيعات', totalSales.toFixed(2) + ' دج'],
-          ['صافي الأرباح', profit.toFixed(2) + ' دج'],
-          ['هامش الربح', (totalSales>0?((profit/totalSales)*100).toFixed(1):0) + '%'],
-          ['الديون المتبقية', totalDebts.toFixed(2) + ' دج'],
-          ['عدد الفواتير', db.sales.length.toString()],
-          ['عدد المنتجات', db.products.length.toString()],
-          ['عدد الموظفين', db.workers.length.toString()],
-          ['رصيد الخزنة', db.cashRegister.toFixed(2) + ' دج']
+          ['Ventes Totales', totalSales.toFixed(2) + ' DZD'],
+          ['Bénéfice Net', profit.toFixed(2) + ' DZD'],
+          ['Marge Bénéficiaire', (totalSales>0?((profit/totalSales)*100).toFixed(1):0) + '%'],
+          ['Dettes Restantes', totalDebts.toFixed(2) + ' DZD'],
+          ['Nombre de Factures', db.sales.length.toString()],
+          ['Nombre de Produits', db.products.length.toString()],
+          ['Nombre d\'Employés', db.workers.length.toString()],
+          ['Solde de Caisse', db.cashRegister.toFixed(2) + ' DZD']
         ];
         
         doc.autoTable({
           startY: y,
-          head: [['البيان', 'القيمة']],
+          head: [['Description', 'Valeur']],
           body: stats,
           theme: 'striped',
           headStyles: { fillColor: [190, 24, 93] },
@@ -1220,13 +1225,13 @@
           doc.rect(20, 20-5, 170, 8, 'F');
           doc.setTextColor(255, 255, 255);
           doc.setFontSize(12);
-          doc.text('أفضل 5 منتجات مبيعاً', 105, 20, null, null, 'center');
+          doc.text('Top 5 Produits Vendus', 105, 20, null, null, 'center');
           
           doc.setTextColor(0, 0, 0);
           doc.autoTable({
             startY: 25,
-            head: [['الترتيب', 'المنتج', 'الكمية', 'الإجمالي']],
-            body: top5.map((p,i)=>[(i+1).toString(), p[0], p[1].qty.toString(), p[1].total.toFixed(2) + ' دج']),
+            head: [['Rang', 'Produit', 'Quantité', 'Total']],
+            body: top5.map((p,i)=>[(i+1).toString(), p[0], p[1].qty.toString(), p[1].total.toFixed(2) + ' DZD']),
             theme: 'striped',
             headStyles: { fillColor: [16, 185, 129] },
             styles: { fontSize: 9 }
@@ -1240,7 +1245,7 @@
           doc.rect(20, 20-5, 170, 8, 'F');
           doc.setTextColor(255, 255, 255);
           doc.setFontSize(12);
-          doc.text('أداء الموظفين', 105, 20, null, null, 'center');
+          doc.text('Performance des Employés', 105, 20, null, null, 'center');
           
           const empStats = {};
           db.sales.forEach(s => {
@@ -1252,8 +1257,8 @@
           doc.setTextColor(0, 0, 0);
           doc.autoTable({
             startY: 25,
-            head: [['الموظف', 'عدد المبيعات', 'إجمالي المبيعات']],
-            body: Object.entries(empStats).map(([name, data]) => [name, data.count.toString(), data.total.toFixed(2) + ' دج']),
+            head: [['Employé', 'Ventes', 'Total Ventes']],
+            body: Object.entries(empStats).map(([name, data]) => [name, data.count.toString(), data.total.toFixed(2) + ' DZD']),
             theme: 'striped',
             headStyles: { fillColor: [59, 130, 246] },
             styles: { fontSize: 9 }
@@ -1268,12 +1273,12 @@
           doc.rect(20, 20-5, 170, 8, 'F');
           doc.setTextColor(255, 255, 255);
           doc.setFontSize(12);
-          doc.text('⚠️ مخزون منخفض', 105, 20, null, null, 'center');
+          doc.text('⚠️ Stock Faible', 105, 20, null, null, 'center');
           
           doc.setTextColor(0, 0, 0);
           doc.autoTable({
             startY: 25,
-            head: [['المنتج', 'المخزون الحالي']],
+            head: [['Produit', 'Stock Actuel']],
             body: low.map(p => [p.name, p.stock.toString()]),
             theme: 'striped',
             headStyles: { fillColor: [239, 68, 68] },
@@ -1282,14 +1287,18 @@
         }
         
         // Save PDF
-        doc.save(`تقرير_${db.shopName}_${new Date().toISOString().slice(0,10)}.pdf`);
-        toast("✅ تم تحميل التقرير PDF", "success", 3000);
+        doc.save(`Rapport_${db.shopName}_${new Date().toISOString().slice(0,10)}.pdf`);
+        toast("✅ Rapport PDF téléchargé", "success", 3000);
       }
 
 
       // ====================== CASH ======================
       function pgCash(c) {
-        const isMgr=db.currentUser?.type==="manager";
+        // Hide entire cash page from workers
+        if(db.currentUser?.type!=="manager"){
+          c.innerHTML=`<div class="text-center py-20"><div class="text-5xl mb-4">🔒</div><h2 class="text-xl font-bold text-gray-600">للمدير فقط</h2></div>`;
+          return;
+        }
         const tin=db.transactions.filter(t=>t.type==="in").reduce((s,t)=>s+n(t.amount),0);
         const tout=db.transactions.filter(t=>t.type==="out").reduce((s,t)=>s+n(t.amount),0);
         c.innerHTML=`<div class="mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">💰 الخزنة</h1></div>
@@ -1298,7 +1307,7 @@
           <div class="stat-card" style="--from:#3b82f6;--to:#2563eb;"><div class="text-sm opacity-80">إيداعات</div><div class="text-2xl font-black">+${tin.toFixed(0)}</div></div>
           <div class="stat-card" style="--from:#ef4444;--to:#dc2626;"><div class="text-sm opacity-80">مسحوبات</div><div class="text-2xl font-black">-${tout.toFixed(0)}</div></div>
         </div>
-        ${isMgr?`<div class="gift-card p-4 mb-5"><h3 class="font-bold mb-3">🔧 أدوات</h3><div class="grid grid-cols-3 gap-2"><button onclick="adjCash('set')" class="btn py-2.5 text-white rounded-xl font-bold text-sm" style="background:linear-gradient(135deg,#2563eb,#1d4ed8);">📝 تعيين</button><button onclick="adjCash('add')" class="btn py-2.5 text-white rounded-xl font-bold text-sm" style="background:linear-gradient(135deg,#10b981,#059669);">➕ إضافة</button><button onclick="adjCash('sub')" class="btn py-2.5 text-white rounded-xl font-bold text-sm" style="background:linear-gradient(135deg,#ef4444,#dc2626);">➖ سحب</button></div></div>`:`<div class="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 mb-5 text-center"><div class="text-3xl mb-2">🔒</div><p class="text-amber-800 font-semibold text-sm">للمدير فقط</p></div>`}
+        <div class="gift-card p-4 mb-5"><h3 class="font-bold mb-3">🔧 أدوات</h3><div class="grid grid-cols-3 gap-2"><button onclick="adjCash('set')" class="btn py-2.5 text-white rounded-xl font-bold text-sm" style="background:linear-gradient(135deg,#2563eb,#1d4ed8);">📝 تعيين</button><button onclick="adjCash('add')" class="btn py-2.5 text-white rounded-xl font-bold text-sm" style="background:linear-gradient(135deg,#10b981,#059669);">➕ إضافة</button><button onclick="adjCash('sub')" class="btn py-2.5 text-white rounded-xl font-bold text-sm" style="background:linear-gradient(135deg,#ef4444,#dc2626);">➖ سحب</button></div></div>
         <div class="gift-card p-4"><div class="flex justify-between mb-3"><h3 class="font-bold">📋 السجل</h3><button onclick="exportTx()" class="btn bg-green-600 text-white px-3 py-1.5 rounded-xl text-xs"><i class="fa-solid fa-download"></i></button></div><div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);"><th class="p-2 text-right">التاريخ</th><th class="p-2 text-right">الوصف</th><th class="p-2 text-right">المبلغ</th><th class="p-2 text-right hidden sm:table-cell">الرصيد</th></tr></thead><tbody>${db.transactions.length===0?'<tr><td colspan="4" class="text-center py-8 text-gray-400">لا معاملات</td></tr>':db.transactions.slice().reverse().slice(0,40).map(t=>`<tr class="border-b border-pink-50"><td class="p-2 text-gray-500">${fmtDate(t.date)}</td><td class="p-2">${t.description}</td><td class="p-2 font-bold ${t.type==='in'?'text-green-600':'text-red-600'}">${t.type==='in'?'+':'-'}${n(t.amount).toFixed(0)}</td><td class="p-2 hidden sm:table-cell">${n(t.balanceAfter).toFixed(0)}</td></tr>`).join('')}</tbody></table></div></div>`;
       }
       function adjCash(act){
@@ -1313,6 +1322,11 @@
 
       // ====================== SYNC ======================
       function pgSync(c) {
+        // Hide sync page from workers - admin only
+        if(db.currentUser?.type!=="manager"){
+          c.innerHTML=`<div class="text-center py-20"><div class="text-5xl mb-4">🔒</div><h2 class="text-xl font-bold text-gray-600">للمدير فقط</h2></div>`;
+          return;
+        }
         const ls=db.lastSyncTime?fmtDate(db.lastSyncTime):"لم تتم";
         const connStatus = db.printerConfig && db.printerConfig.online ? "🌐 متصل" : "⚠️ غير متصل";
         const printerStatus = db.printerConfig && db.printerConfig.billPrinter ? "🖨️ طابعة الفواتير: متصل" : "⚠️ طابعة الفواتير: غير موجود";
@@ -1484,15 +1498,16 @@
         renderWorkers();
       }
       
-      // Generate QR Code for auto-configuration
+      // Generate QR Code for auto-configuration - FIXED: Does not reset password
       function generateQRCode() {
-        if(!db.googleSheetURL){toast("أعد رابط Google أولاً","error");return;}
+        if(!db.googleSheetURL){toast("Configurez d'abord le lien Google Sheets","error");return;}
         
         const configData = {
           shopName: db.shopName,
           managerName: db.manager?.name,
           googleSheetURL: db.googleSheetURL,
           autoSyncEnabled: db.autoSyncEnabled
+          // NOTE: We do NOT include the PIN in the QR code for security
         };
         
         const configStr = JSON.stringify(configData);
@@ -1506,13 +1521,14 @@
         modal.innerHTML = `
           <div class="modal-content">
             <div class="p-4 sm:p-6 rounded-t-3xl flex justify-between items-center" style="background:linear-gradient(135deg,#be185d,#9333ea)">
-              <h3 class="text-lg font-bold text-white">📱 رمز الاستجابة السريعة</h3>
+              <h3 class="text-lg font-bold text-white">📱 Code QR de Configuration</h3>
               <button onclick="document.getElementById('qrModal').remove()" class="btn text-white text-2xl bg-transparent">&times;</button>
             </div>
             <div class="p-4 sm:p-6 text-center">
-              <p class="text-sm text-gray-600 mb-4">امسح هذا الرمز من جهاز آخر للإعداد التلقائي</p>
+              <p class="text-sm text-gray-600 mb-4">Scannez ce code avec un autre appareil pour configuration automatique</p>
               <div id="qrcode" class="flex justify-center mb-4"></div>
-              <button onclick="navigator.clipboard.writeText('${qrUrl}').then(()=>toast('✅ تم نسخ الرابط'))" class="btn w-full py-3 bg-purple-600 text-white rounded-xl font-bold">📋 نسخ الرابط</button>
+              <p class="text-xs text-orange-600 mb-2">⚠️ Le mot de passe du manager reste inchangé sur l'appareil cible</p>
+              <button onclick="navigator.clipboard.writeText('${qrUrl}').then(()=>toast('✅ Lien copié'))" class="btn w-full py-3 bg-purple-600 text-white rounded-xl font-bold">📋 Copier le lien</button>
             </div>
           </div>
         `;
@@ -1693,36 +1709,50 @@
         devices.online = navigator.onLine;
         devices.connectionType = navigator.connection ? navigator.connection.effectiveType : 'unknown';
         
+        // Store previous state to only notify on change
+        const prevOnline = db.printerConfig?.online;
+        const prevBillPrinter = db.printerConfig?.billPrinter;
+        const prevStickerPrinter = db.printerConfig?.stickerPrinter;
+        const prevBarcodeScanner = db.printerConfig?.barcodeScanner;
+        
         db.printerConfig = { ...db.printerConfig, ...devices };
         saveData();
         
-        // Show connectivity status toast
-        let msg = "🌐 متصل بالإنترنت";
-        if (!devices.online) msg = "⚠️ غير متصل بالإنترنت";
-        else if (devices.billPrinter) msg += " | 🖨️ طابعة الفواتير جاهزة";
-        else msg += " | ⚠️ لا توجد طابعة";
-        
-        toast(msg, devices.online ? "success" : "error", 4000);
+        // Only show toast if status changed (not on silent or initial load)
+        if (!silent && prevOnline !== undefined) {
+          if (prevOnline !== devices.online) {
+            toast(devices.online ? "✅ Internet connecté" : "⚠️ Internet déconnecté", devices.online ? "success" : "error", 3000);
+          }
+          if (prevBillPrinter !== devices.billPrinter) {
+            toast(devices.billPrinter ? "🖨️ Imprimante de factures connectée" : "⚠️ Imprimante de factures déconnectée", devices.billPrinter ? "success" : "error", 2000);
+          }
+          if (prevStickerPrinter !== devices.stickerPrinter) {
+            toast(devices.stickerPrinter ? "🏷️ Imprimante d'étiquettes connectée" : "⚠️ Imprimante d'étiquettes déconnectée", devices.stickerPrinter ? "success" : "error", 2000);
+          }
+          if (prevBarcodeScanner !== devices.barcodeScanner) {
+            toast(devices.barcodeScanner ? "📷 Lecteur code-barres connecté" : "⚠️ Lecteur code-barres déconnecté", devices.barcodeScanner ? "success" : "error", 2000);
+          }
+        }
       }
       
       function setupAutoSyncOnOnline() {
         window.addEventListener('online', async () => {
-          toast("✅ تم الاتصال بالإنترنت - جاري المزامنة التلقائية...", "info", 3000);
-          await checkConnectivity();
           if (db.googleSheetURL && db.autoSyncEnabled) {
             await syncUp(true);
+            toast("✅ Internet reconnecté - Synchronisation automatique effectuée", "success", 3000);
           } else if (db.googleSheetURL) {
             await syncUp(true);
+            toast("✅ Internet reconnecté - Synchronisation effectuée", "info", 3000);
           }
         });
         
         window.addEventListener('offline', () => {
-          toast("⚠️ انقطع الاتصال بالإنترنت - العمل بدون اتصال", "error", 5000);
+          toast("⚠️ Connexion Internet perdue - Mode hors ligne activé", "error", 5000);
           updateSyncInd();
         });
         
-        // Periodic connectivity check every 30 seconds
-        setInterval(checkConnectivity, 30000);
+        // Periodic connectivity check every 60 seconds (less frequent to avoid spam)
+        setInterval(checkConnectivity, 60000);
         
         // Initial connectivity check on load
         setTimeout(checkConnectivity, 2000);
