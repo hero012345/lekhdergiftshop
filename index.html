@@ -1353,12 +1353,13 @@
         const st=document.getElementById("syncStatus");
         if(st)st.innerHTML=`<div class="sync-loading">🔄 جاري...</div>`;
         try {
+          // Encrypt PINs before sending to Google Sheets
           const payload = {
             action: "sync",
             shopName: db.shopName || "متجر الهدايا الذهبي",
             manager: {
               name: db.manager?.name || "",
-              pin: (db.manager?.pin || "").toString(),
+              pin: encryptPIN(db.manager?.pin || ""),
               phone: db.manager?.phone || ""
             },
             cashRegister: db.cashRegister || 0,
@@ -1384,7 +1385,7 @@
             })),
             workers: (db.workers || []).map(w => ({
               id: w.id, name: w.name || "", phone: w.phone || "",
-              pin: (w.pin || "").toString(), role: w.role || "موظف"
+              pin: encryptPIN(w.pin || ""), role: w.role || "موظف"
             })),
             purchases: (db.purchases || []).map(p => ({
               id: p.id, supplierId: p.supplierId, supplierName: p.supplierName || "",
@@ -1423,9 +1424,35 @@
           if(d.status==="success"&&d.hasData){
             if(!confirm(`استبدال البيانات؟\n${(d.products||[]).length} منتج | ${(d.sales||[]).length} عملية`)){if(st)st.innerHTML=`<div class="sync-error">تم الإلغاء</div>`;return;}
             if(d.shopName)db.shopName=d.shopName;
-            if(d.manager?.name)db.manager={name:d.manager.name,pin:String(d.manager.pin||""),phone:d.manager.phone||""};
+            if(d.manager?.name){
+              // Decrypt PIN when loading from Google Sheets
+              let managerPin = d.manager.pin || "";
+              try {
+                managerPin = decryptPIN(managerPin);
+              } catch(e) {
+                // If decryption fails, use as-is (might be plain text)
+                managerPin = String(managerPin);
+              }
+              db.manager={name:d.manager.name,pin:managerPin,phone:d.manager.phone||""};
+            }
             if(d.cashRegister!==undefined)db.cashRegister=n(d.cashRegister);
-            ["products","sales","debts","suppliers","workers","purchases","transactions"].forEach(k=>{if(d[k])db[k]=d[k];});
+            ["products","sales","debts","suppliers","workers","purchases","transactions"].forEach(k=>{
+              if(d[k]){
+                db[k]=d[k];
+                // Decrypt worker PINs
+                if(k==="workers" && db[k]){
+                  db[k] = db[k].map(w => {
+                    let workerPin = w.pin || "";
+                    try {
+                      workerPin = decryptPIN(workerPin);
+                    } catch(e) {
+                      workerPin = String(workerPin);
+                    }
+                    return {...w, pin: workerPin};
+                  });
+                }
+              }
+            });
             if(d.nextInvoice)db.nextInvoice=d.nextInvoice;
             db.lastSyncTime=new Date().toISOString();saveData();
             if(st)st.innerHTML=`<div class="sync-success">✅ تم التحميل!</div>`;
@@ -1605,7 +1632,7 @@
         toast("✅ تم تغيير كود المدير بنجاح", "success", 3000);
         return true;
       }
-      function genLink(){if(!db.googleSheetURL){toast("أعد رابط Google أولاً","error");return;}const l=`${location.origin+location.pathname}?sheet=${encodeURIComponent(db.googleSheetURL)}&autoSetup=true`;navigator.clipboard.writeText(l).then(()=>toast("✅ تم النسخ")).catch(()=>prompt("انسخ:",l));}
+      function genLink(){if(!db.googleSheetURL){toast("أعد رابط Google أولاً","error");return;}const l=`${location.origin+location.pathname}?config=${btoa(encodeURIComponent(JSON.stringify({shopName:db.shopName,managerName:db.manager?.name,googleSheetURL:db.googleSheetURL,autoSyncEnabled:db.autoSyncEnabled})))}`;navigator.clipboard.writeText(l).then(()=>toast("✅ تم النسخ")).catch(()=>prompt("انسخ:",l));}
       function resetAll(){if(confirm("⚠️ مسح جميع البيانات؟")&&confirm("تأكيد نهائي!")){localStorage.removeItem("giftShopDB");location.reload();}}
 
       // ====================== RENDER WORKERS ======================
