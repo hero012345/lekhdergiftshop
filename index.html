@@ -485,6 +485,49 @@
       </div>
     </div>
 
+    <!-- Configuration Panel Modal -->
+    <div id="configModal" class="modal">
+      <div class="modal-content">
+        <div class="p-4 sm:p-6 rounded-t-3xl flex justify-between items-center" style="background:linear-gradient(135deg,#be185d,#9333ea)">
+          <h3 class="text-lg font-bold text-white">🎛️ لوحة الإعدادات الشاملة</h3>
+          <button onclick="closeModal('configModal')" class="btn text-white text-2xl bg-transparent">&times;</button>
+        </div>
+        <div class="p-4 sm:p-6">
+          <form id="configForm" onsubmit="saveConfig(event)">
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1 text-gray-700">🏪 اسم المتجر</label>
+              <input type="text" id="cfgShopName" required class="w-full p-3 border-2 border-pink-100 rounded-xl outline-none focus:border-pink-400" placeholder="متجر الهدايا الذهبي" />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1 text-gray-700">👤 اسم المدير</label>
+              <input type="text" id="cfgManagerName" required class="w-full p-3 border-2 border-pink-100 rounded-xl outline-none focus:border-pink-400" placeholder="المدير" />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1 text-gray-700">🔑 كود المدير (4+ أرقام)</label>
+              <input type="text" id="cfgManagerPin" required maxlength="8" inputmode="numeric" autocomplete="off" class="w-full p-3 border-2 border-pink-100 rounded-xl text-center text-2xl tracking-widest outline-none focus:border-pink-400" placeholder="••••••" />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-1 text-gray-700">☁️ رابط Google Sheets (اختياري)</label>
+              <input type="url" id="cfgGoogleURL" class="w-full p-3 border-2 border-pink-100 rounded-xl outline-none focus:border-pink-400 text-xs" placeholder="https://script.google.com/macros/s/..." />
+            </div>
+            <div class="mb-6">
+              <label class="flex items-center justify-between p-3 bg-pink-50 rounded-xl cursor-pointer">
+                <span class="font-semibold text-gray-700">🔄 المزامنة التلقائية عند الاتصال بالإنترنت</span>
+                <input type="checkbox" id="cfgAutoSync" class="w-5 h-5 accent-pink-600" />
+              </label>
+            </div>
+            <div class="flex gap-3 mt-6">
+              <button type="button" onclick="closeModal('configModal')" class="btn flex-1 py-3 bg-gray-100 rounded-xl font-semibold text-gray-700">إلغاء</button>
+              <button type="submit" class="btn flex-1 py-3 bg-gradient-to-r from-pink-600 to-purple-600 text-white rounded-xl font-semibold shadow-lg">💾 حفظ الإعدادات</button>
+            </div>
+          </form>
+          <div class="mt-6 pt-6 border-t border-gray-200">
+            <button onclick="resetFactory()" class="w-full py-3 bg-red-50 text-red-600 rounded-xl font-semibold hover:bg-red-100 transition-colors">⚠️ إعادة ضبط المصنع</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script>
       // ====================== DATA ======================
       let db = {
@@ -1130,7 +1173,8 @@
         c.innerHTML=`<div class="mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">👑 لوحة المدير</h1></div>
         ${db.googleSheetURL?`<div class="setup-link-box mb-5"><div class="font-bold mb-2">🔗 مشاركة:</div><button onclick="genLink()" class="btn w-full bg-white py-2.5 rounded-xl font-bold" style="color:#be185d;">📋 نسخ رابط الإعداد</button></div>`:''}
         <div class="two-col">
-          <div class="gift-card p-4"><h3 class="font-bold mb-3">⚙️ الإعدادات</h3>
+          <div class="gift-card p-4"><h3 class="font-bold mb-3">⚙️ الإعدادات العامة</h3>
+            <button onclick="openConfigPanel()" class="btn w-full mb-2 py-2.5 bg-purple-50 text-purple-700 rounded-xl text-sm font-semibold">🎛️ لوحة الإعدادات الشاملة</button>
             <button onclick="chgName()" class="btn w-full mb-2 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-sm font-semibold">🏪 اسم المتجر</button>
             <button onclick="chgPin()" class="btn w-full mb-2 py-2.5 bg-red-50 text-red-700 rounded-xl text-sm font-semibold">🔑 كود المدير</button>
             <button onclick="chgURL()" class="btn w-full mb-2 py-2.5 bg-green-50 text-green-700 rounded-xl text-sm font-semibold">☁️ رابط Google</button>
@@ -1139,6 +1183,58 @@
           <div class="gift-card p-4"><div class="flex justify-between items-center mb-3"><h3 class="font-bold">👥 الموظفين (${db.workers.length})</h3><button onclick="openWorkerModal()" class="btn-primary px-3 py-1.5 text-sm">➕</button></div><div id="workersList" class="space-y-2 max-h-72 overflow-auto"></div></div>
         </div>`;
         renderWorkers();
+      }
+      
+      // Configuration Panel Modal
+      function openConfigPanel() {
+        const modal = document.getElementById('configModal');
+        document.getElementById('cfgShopName').value = db.shopName || '';
+        document.getElementById('cfgManagerName').value = db.manager?.name || '';
+        document.getElementById('cfgManagerPin').value = db.manager?.pin || '';
+        document.getElementById('cfgGoogleURL').value = db.googleSheetURL || '';
+        document.getElementById('cfgAutoSync').checked = db.autoSyncEnabled || false;
+        openModal('configModal');
+      }
+      
+      function saveConfig(e) {
+        e.preventDefault();
+        const shopName = document.getElementById('cfgShopName').value.trim();
+        const mgrName = document.getElementById('cfgManagerName').value.trim();
+        const mgrPin = document.getElementById('cfgManagerPin').value.trim();
+        const googleURL = document.getElementById('cfgGoogleURL').value.trim();
+        const autoSync = document.getElementById('cfgAutoSync').checked;
+        
+        if (!shopName) { toast('⚠️ اسم المتجر مطلوب', 'error'); return; }
+        if (!mgrName) { toast('⚠️ اسم المدير مطلوب', 'error'); return; }
+        if (!mgrPin || mgrPin.length < 4) { toast('⚠️ كود المدير يجب أن يكون 4 أرقام على الأقل', 'error'); return; }
+        if (googleURL && !googleURL.startsWith('https://script.google.com')) { toast('⚠️ رابط Google غير صالح', 'error'); return; }
+        
+        db.shopName = shopName;
+        db.manager.name = mgrName;
+        db.manager.pin = mgrPin;
+        db.googleSheetURL = googleURL;
+        db.autoSyncEnabled = autoSync;
+        
+        document.getElementById('sidebarShopName').textContent = db.shopName;
+        saveData();
+        
+        if (autoSync && googleURL) {
+          startAutoSync();
+          syncUp(true);
+        } else {
+          stopAutoSync();
+        }
+        
+        closeModal('configModal');
+        toast('✅ تم حفظ الإعدادات بنجاح', 'success', 4000);
+        loadPage(7);
+      }
+      
+      function resetFactory() {
+        if (!confirm('⚠️ هل أنت متأكد من إعادة ضبط المصنع؟\nسيتم مسح جميع البيانات والإعدادات!')) return;
+        if (!confirm('⚠️ تأكيد نهائي: سيتم حذف كل شيء!')) return;
+        localStorage.removeItem('giftShopDB');
+        location.reload();
       }
       function openWorkerModal(idx=null){if(idx!==null&&idx!==undefined){const w=db.workers[idx];if(!w)return;document.getElementById("modalWorkerTitle").textContent="✏️ تعديل";document.getElementById("workerId").value=idx;document.getElementById("workerName").value=w.name;document.getElementById("workerPhone").value=w.phone||"";document.getElementById("workerPin").value=w.pin;}else{document.getElementById("modalWorkerTitle").textContent="👤 إضافة";document.getElementById("workerForm").reset();document.getElementById("workerId").value="";}openModal("workerModal");}
       function saveWorker(e){e.preventDefault();const idx=document.getElementById("workerId").value,pin=document.getElementById("workerPin").value.trim();if(pin.length<4){toast("4 أرقام على الأقل","error");return;}if(pin===db.manager.pin.toString()){toast("مستخدم من المدير","error");return;}const dup=db.workers.find((w,i)=>w.pin.toString()===pin&&i.toString()!==idx);if(dup){toast("مستخدم من موظف آخر","error");return;}const w={id:(idx!==""?db.workers[parseInt(idx)]?.id:null)||Date.now(),name:document.getElementById("workerName").value.trim(),phone:document.getElementById("workerPhone").value.trim(),pin,role:"موظف"};if(idx!=="")db.workers[parseInt(idx)]=w;else db.workers.push(w);saveData();if(db.googleSheetURL)syncUp(true);closeModal("workerModal");toast("✅ تم");loadPage(7);}
