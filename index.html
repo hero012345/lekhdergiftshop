@@ -581,7 +581,7 @@
         sales: [], debts: [], suppliers: [], purchases: [], transactions: [],
         cashRegister: 0, nextInvoice: 1001, googleSheetURL: "",
         lastSyncTime: null, autoSyncEnabled: false, currentUser: null,
-        encryptionKey: null, printerConfig: { billPrinter: null, stickerPrinter: null, barcodeScanner: null }
+        printerConfig: { billPrinter: null, stickerPrinter: null, barcodeScanner: null }
       };
       let currentStep = 1;
       let setupData = { shopName: "", managerName: "", managerPin: "", googleURL: "" };
@@ -606,72 +606,15 @@
       // ====================== HELPERS ======================
       function saveData() { 
         try { 
-          const dataToSave = JSON.parse(JSON.stringify(db));
-          if (dataToSave.manager && dataToSave.manager.pin) {
-            dataToSave.manager.pin = encryptPIN(dataToSave.manager.pin);
-          }
-          if (dataToSave.workers) {
-            dataToSave.workers = dataToSave.workers.map(w => ({...w, pin: encryptPIN(w.pin)}));
-          }
-          localStorage.setItem("giftShopDB", JSON.stringify(dataToSave)); 
+          // No encryption - save PINs as plain text
+          localStorage.setItem("giftShopDB", JSON.stringify(db)); 
         } catch(e) {} 
       }
       
-      // Enhanced encryption using Web Crypto API
-      async function generateEncryptionKey() {
-        if (db.encryptionKey) return db.encryptionKey;
-        const keyMaterial = await crypto.subtle.importKey(
-          "raw",
-          new TextEncoder().encode("giftshop_" + (db.shopName || "default") + "_" + navigator.userAgent),
-          { name: "PBKDF2" },
-          false,
-          ["deriveBits", "deriveKey"]
-        );
-        db.encryptionKey = await crypto.subtle.deriveKey(
-          { name: "PBKDF2", salt: new TextEncoder().encode("salt_" + db.shopName), iterations: 100000, hash: "SHA-256" },
-          keyMaterial,
-          { name: "AES-GCM", length: 256 },
-          false,
-          ["encrypt", "decrypt"]
-        );
-        return db.encryptionKey;
-      }
-      
-      function encryptPIN(pin) {
-        // Simple reversible encryption for PINs - compatible across devices
-        if (!pin || typeof pin !== 'string') return "";
-        const key = "giftshop_secure_key_2024";
-        let encrypted = "";
-        for (let i = 0; i < pin.length; i++) {
-          const charCode = pin.charCodeAt(i);
-          const keyChar = key.charCodeAt(i % key.length);
-          encrypted += String.fromCharCode(((charCode + keyChar) % 95) + 33);
-        }
-        return btoa(encrypted);
-      }
-      
-      function decryptPIN(encryptedPin) {
-        try {
-          if (!encryptedPin || typeof encryptedPin !== 'string') return "";
-          // Check if already decrypted (plain text number)
-          if (/^\d+$/.test(encryptedPin)) return encryptedPin;
-          
-          const decrypted = atob(encryptedPin);
-          const key = "giftshop_secure_key_2024";
-          let original = "";
-          for (let i = 0; i < decrypted.length; i++) {
-            const charCode = decrypted.charCodeAt(i);
-            const keyChar = key.charCodeAt(i % key.length);
-            let originalCharCode = ((charCode - 33 - keyChar + 95) % 95) + 48;
-            original += String.fromCharCode(originalCharCode);
-          }
-          return original;
-        } catch(e) { 
-          // If decryption fails, return as-is (might be plain text from old data)
-          console.log("Decryption failed, returning as-is:", encryptedPin);
-          return String(encryptedPin); 
-        }
-      }
+      // ====================== UTILS (NO ENCRYPTION) ======================
+      // Encryption disabled for cross-device compatibility - PINs stored in plain text
+      function encryptPIN(pin) { return pin; }
+      function decryptPIN(encryptedPin) { return encryptedPin; }
       
       function n(v) { const x = parseFloat(v); return isNaN(x) ? 0 : x; }
       function fmtDate(d) { try { return new Date(d).toLocaleString("ar-DZ",{dateStyle:"short",timeStyle:"short"}); } catch(e) { return d||""; } }
@@ -730,23 +673,17 @@
           try { 
             const loadedData = JSON.parse(saved);
             db = { ...db, ...loadedData };
-            if (loadedData.manager && loadedData.manager.pin) {
-              db.manager.pin = decryptPIN(loadedData.manager.pin);
-            }
-            if (loadedData.workers) {
-              db.workers = loadedData.workers.map(w => ({...w, pin: decryptPIN(w.pin)}));
-            }
+            // No decryption needed - PINs are plain text
           } catch(e){} 
         }
         ["products","sales","debts","suppliers","workers","purchases","transactions"].forEach(k => { if(!Array.isArray(db[k])) db[k]=[]; });
         if (!db.manager) db.manager = {name:"",pin:"",phone:""};
         if (!db.cashRegister) db.cashRegister = 0;
 
-        await generateEncryptionKey();
         checkConnectivity();
         setupAutoSyncOnOnline();
 
-        // Handle QR code configuration - FIXED: Properly handles encrypted PINs
+        // Handle QR code configuration - FIXED: PINs now stored in plain text
         const configParam = params.get("config");
         if (configParam) {
           try {
@@ -1430,13 +1367,13 @@
         const st=document.getElementById("syncStatus");
         if(st)st.innerHTML=`<div class="sync-loading">🔄 جاري...</div>`;
         try {
-          // Encrypt PINs before sending to Google Sheets
+          // No encryption - send PINs as plain text for cross-device compatibility
           const payload = {
             action: "sync",
             shopName: db.shopName || "متجر الهدايا الذهبي",
             manager: {
               name: db.manager?.name || "",
-              pin: encryptPIN(db.manager?.pin || ""),
+              pin: db.manager?.pin || "", // Plain text PIN
               phone: db.manager?.phone || ""
             },
             cashRegister: db.cashRegister || 0,
@@ -1462,7 +1399,7 @@
             })),
             workers: (db.workers || []).map(w => ({
               id: w.id, name: w.name || "", phone: w.phone || "",
-              pin: encryptPIN(w.pin || ""), role: w.role || "موظف"
+              pin: w.pin || "", role: w.role || "موظف" // Plain text PIN
             })),
             purchases: (db.purchases || []).map(p => ({
               id: p.id, supplierId: p.supplierId, supplierName: p.supplierName || "",
@@ -1502,32 +1439,14 @@
             if(!confirm(`استبدال البيانات؟\n${(d.products||[]).length} منتج | ${(d.sales||[]).length} عملية`)){if(st)st.innerHTML=`<div class="sync-error">تم الإلغاء</div>`;return;}
             if(d.shopName)db.shopName=d.shopName;
             if(d.manager?.name){
-              // Decrypt PIN when loading from Google Sheets
-              let managerPin = d.manager.pin || "";
-              try {
-                managerPin = decryptPIN(managerPin);
-              } catch(e) {
-                // If decryption fails, use as-is (might be plain text)
-                managerPin = String(managerPin);
-              }
-              db.manager={name:d.manager.name,pin:managerPin,phone:d.manager.phone||""};
+              // No decryption needed - PINs are now plain text
+              db.manager={name:d.manager.name,pin:d.manager.pin||"",phone:d.manager.phone||""};
             }
             if(d.cashRegister!==undefined)db.cashRegister=n(d.cashRegister);
             ["products","sales","debts","suppliers","workers","purchases","transactions"].forEach(k=>{
               if(d[k]){
                 db[k]=d[k];
-                // Decrypt worker PINs
-                if(k==="workers" && db[k]){
-                  db[k] = db[k].map(w => {
-                    let workerPin = w.pin || "";
-                    try {
-                      workerPin = decryptPIN(workerPin);
-                    } catch(e) {
-                      workerPin = String(workerPin);
-                    }
-                    return {...w, pin: workerPin};
-                  });
-                }
+                // Worker PINs are already plain text - no decryption needed
               }
             });
             if(d.nextInvoice)db.nextInvoice=d.nextInvoice;
@@ -1572,10 +1491,10 @@
         const configData = {
           shopName: db.shopName,
           managerName: db.manager?.name,
-          managerPin: db.manager?.pin, // Include the PIN (already encrypted in memory after login)
+          managerPin: db.manager?.pin, // Plain text PIN now - no encryption
           googleSheetURL: db.googleSheetURL,
           autoSyncEnabled: db.autoSyncEnabled,
-          workers: (db.workers || []).map(w => ({ name: w.name, pin: w.pin, role: w.role })) // Include workers with their PINs
+          workers: (db.workers || []).map(w => ({ name: w.name, pin: w.pin, role: w.role })) // Workers with plain text PINs
         };
         
         const configStr = JSON.stringify(configData);
@@ -1676,17 +1595,8 @@
         }
         try {
           const dbData = JSON.parse(saved);
-          // Reset manager PIN to default while keeping other data
+          // Reset manager PIN to default while keeping other data (plain text now)
           dbData.manager.pin = '123456';
-          // Re-encrypt with new encryption
-          const key = "giftshop_secure_key_2024";
-          let encrypted = "";
-          for (let i = 0; i < dbData.manager.pin.length; i++) {
-            const charCode = dbData.manager.pin.charCodeAt(i);
-            const keyChar = key.charCodeAt(i % key.length);
-            encrypted += String.fromCharCode((charCode + keyChar) % 128);
-          }
-          dbData.manager.pin = btoa(encrypted);
           localStorage.setItem('giftShopDB', JSON.stringify(dbData));
           console.log('✅ Manager PIN reset to 123456');
           console.log('Please refresh the page and use PIN: 123456');
