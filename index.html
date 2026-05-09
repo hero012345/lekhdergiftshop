@@ -649,11 +649,15 @@
       function buildSidebar() {
         const nav = document.getElementById("sidebarNav");
         if (!nav) return;
-        nav.innerHTML = NAV_ITEMS.map((item, i) =>
-          `<div class="sidebar-item ${i===activePage?'active':''}" data-page="${i}" onclick="navClick(${i})">
+        const isManager = db.currentUser?.type === "manager";
+        // Hide admin-only items from non-managers: Cash(5), Sync(6), Manager(7)
+        nav.innerHTML = NAV_ITEMS.map((item, i) => {
+          // Hide Cash, Sync, Manager from non-managers
+          if(!isManager && (i===5 || i===6 || i===7)) return '';
+          return `<div class="sidebar-item ${i===activePage?'active':''}" data-page="${i}" onclick="navClick(${i})">
             <i class="fa-solid ${item.icon} ${item.color}"></i><span>${item.label}</span>
-          </div>`
-        ).join("");
+          </div>`;
+        }).filter(x=>x).join("");
       }
 
       function navClick(pg) {
@@ -851,6 +855,11 @@
       function loadPage(pg) {
         activePage=pg;
         const c=document.getElementById("mainContent"); c.innerHTML=""; c.scrollTop=0;
+        // Hide admin-only pages from non-managers
+        const isManager = db.currentUser?.type === "manager";
+        if(pg===7 && !isManager){toast("للمدير فقط","error");loadPage(0);return;}
+        if(pg===5 && !isManager){toast("للمدير فقط","error");loadPage(0);return;}
+        if(pg===6 && !isManager){toast("للمدير فقط","error");loadPage(0);return;}
         switch(pg){case 0:pgPOS(c);break;case 1:pgProducts(c);break;case 2:pgDebts(c);break;case 3:pgSuppliers(c);break;case 4:pgReports(c);break;case 5:pgCash(c);break;case 6:pgSync(c);break;case 7:pgManager(c);break;}
       }
 
@@ -1429,14 +1438,14 @@
         }
       }
 
-      async function syncDown() {
-        if(!db.googleSheetURL){toast("⚠️ لا رابط","error");return;}
+      async function syncDown(silent=false) {
+        if(!db.googleSheetURL){if(!silent)toast("⚠️ لا رابط","error");return;}
         const st=document.getElementById("syncStatus");
         if(st)st.innerHTML=`<div class="sync-loading">📥 تحميل...</div>`;
         try {
           const r=await fetch(db.googleSheetURL+"?action=get");const d=await r.json();
           if(d.status==="success"&&d.hasData){
-            if(!confirm(`استبدال البيانات؟\n${(d.products||[]).length} منتج | ${(d.sales||[]).length} عملية`)){if(st)st.innerHTML=`<div class="sync-error">تم الإلغاء</div>`;return;}
+            if(!silent && !confirm(`استبدال البيانات؟\n${(d.products||[]).length} منتج | ${(d.sales||[]).length} عملية`)){if(st)st.innerHTML=`<div class="sync-error">تم الإلغاء</div>`;return;}
             if(d.shopName)db.shopName=d.shopName;
             if(d.manager?.name){
               // No decryption needed - PINs are now plain text
@@ -1452,13 +1461,14 @@
             if(d.nextInvoice)db.nextInvoice=d.nextInvoice;
             db.lastSyncTime=new Date().toISOString();saveData();
             if(st)st.innerHTML=`<div class="sync-success">✅ تم التحميل!</div>`;
-            toast("✅ تم تحميل البيانات");loadPage(activePage);
-          }else{if(st)st.innerHTML=`<div class="sync-error">⚠️ لا بيانات</div>`;toast("لا بيانات","error");}
-        }catch(err){if(st)st.innerHTML=`<div class="sync-error">❌ ${err.message}</div>`;toast("❌ فشل","error");}
+            if(!silent){toast("✅ تم تحميل البيانات");loadPage(activePage);}
+            else{loadPage(activePage);}
+          }else{if(!silent){if(st)st.innerHTML=`<div class="sync-error">⚠️ لا بيانات</div>`;toast("لا بيانات","error");}}
+        }catch(err){if(!silent){if(st)st.innerHTML=`<div class="sync-error">❌ ${err.message}</div>`;toast("❌ فشل","error");}}
       }
 
       function toggleAuto(on){db.autoSyncEnabled=on;saveData();if(on){startAutoSync();toast("✅ تلقائي مفعّل");}else{stopAutoSync();toast("⏸️ موقف","info");}}
-      function startAutoSync(){stopAutoSync();if(db.googleSheetURL)syncInterval=setInterval(()=>syncUp(true),5*60*1000);updateSyncInd();}
+      function startAutoSync(){stopAutoSync();if(db.googleSheetURL)syncInterval=setInterval(()=>syncUp(true),1000);updateSyncInd();}
       function stopAutoSync(){if(syncInterval){clearInterval(syncInterval);syncInterval=null;}}
       function updateSyncInd(){const el=document.getElementById("syncIndicator");if(!el)return;if(db.autoSyncEnabled)el.innerHTML='🔄 تلقائي';else if(db.lastSyncTime)el.innerHTML=`آخر: ${Math.floor((Date.now()-new Date(db.lastSyncTime))/60000)}د`;else el.innerHTML='';}
 
@@ -1714,23 +1724,38 @@
       }
       
       function setupAutoSyncOnOnline() {
-        window.addEventListener('online', async () => {
-          if (db.googleSheetURL && db.autoSyncEnabled) {
-            await syncUp(true);
-            toast("✅ Internet reconnecté - Synchronisation automatique effectuée", "success", 3000);
-          } else if (db.googleSheetURL) {
-            await syncUp(true);
-            toast("✅ Internet reconnecté - Synchronisation effectuée", "info", 3000);
-          }
-        });
+        let wasOnline = navigator.onLine;
         
-        window.addEventListener('offline', () => {
-          toast("⚠️ Connexion Internet perdue - Mode hors ligne activé", "error", 5000);
+        window.addEventListener('online', async () => {
+          if (!wasOnline && db.googleSheetURL) {
+            await syncDown(true); // Silent download to get latest data from other devices
+            await syncUp(true);   // Silent upload to send local changes
+            toast("✅ تم الاتصال بالإنترنت - تمت المزامنة التلقائية", "success", 2000);
+          }
+          wasOnline = true;
           updateSyncInd();
         });
         
-        // Periodic connectivity check every 60 seconds (less frequent to avoid spam)
-        setInterval(checkConnectivity, 60000);
+        window.addEventListener('offline', () => {
+          if (wasOnline) {
+            toast("⚠️ انقطع الاتصال بالإنترنت - وضع عدم الاتصال مفعّل", "error", 3000);
+          }
+          wasOnline = false;
+          updateSyncInd();
+        });
+        
+        // Check connectivity every 30 seconds
+        setInterval(() => {
+          const isNowOnline = navigator.onLine;
+          if (isNowOnline !== wasOnline) {
+            if (isNowOnline && db.googleSheetURL) {
+              syncDown(true);
+              syncUp(true);
+            }
+            wasOnline = isNowOnline;
+            updateSyncInd();
+          }
+        }, 30000);
         
         // Initial connectivity check on load
         setTimeout(checkConnectivity, 2000);
