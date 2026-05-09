@@ -489,6 +489,47 @@
       </div>
     </div>
 
+    <!-- Sticker Printer Modal -->
+    <div id="stickerModal" class="modal">
+      <div class="modal-content">
+        <div class="p-4 sm:p-6 rounded-t-3xl flex justify-between items-center" style="background:linear-gradient(135deg,#059669,#047857)">
+          <h3 class="text-lg font-bold text-white">🏷️ طباعة ملصقات الباركود</h3>
+          <button onclick="closeModal('stickerModal')" class="btn text-white text-2xl bg-transparent">&times;</button>
+        </div>
+        <div class="p-4 sm:p-6">
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-1 text-gray-700">اختر المنتج</label>
+            <select id="stickerProductSelect" onchange="updateStickerPreview()" class="w-full p-3 border-2 border-green-100 rounded-xl bg-white outline-none">
+              <option value="">-- اختر منتج --</option>
+            </select>
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-1 text-gray-700">الكمية المطلوبة</label>
+            <input type="number" id="stickerQuantity" value="1" min="1" max="100" onchange="updateStickerPreview()" class="w-full p-3 border-2 border-green-100 rounded-xl outline-none text-center" />
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-1 text-gray-700">المعلومات المعروضة</label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 p-2 border rounded-lg cursor-pointer"><input type="checkbox" id="showName" checked onchange="updateStickerPreview()" class="w-4 h-4" /><span class="text-sm">اسم المنتج</span></label>
+              <label class="flex items-center gap-2 p-2 border rounded-lg cursor-pointer"><input type="checkbox" id="showPrice" checked onchange="updateStickerPreview()" class="w-4 h-4" /><span class="text-sm">السعر</span></label>
+              <label class="flex items-center gap-2 p-2 border rounded-lg cursor-pointer"><input type="checkbox" id="showBarcode" checked onchange="updateStickerPreview()" class="w-4 h-4" /><span class="text-sm">الباركود</span></label>
+              <label class="flex items-center gap-2 p-2 border rounded-lg cursor-pointer"><input type="checkbox" id="showCategory" onchange="updateStickerPreview()" class="w-4 h-4" /><span class="text-sm">الفئة</span></label>
+            </div>
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-1 text-gray-700">معاينة الملصق</label>
+            <div id="stickerPreview" class="border-2 border-dashed border-gray-300 rounded-xl p-4 bg-gray-50 min-h-[120px] flex items-center justify-center">
+              <p class="text-gray-400 text-sm">اختر منتج للمعاينة</p>
+            </div>
+          </div>
+          <div class="flex gap-3 mt-6">
+            <button type="button" onclick="closeModal('stickerModal')" class="btn flex-1 py-3 bg-gray-100 rounded-xl font-semibold text-gray-700">إلغاء</button>
+            <button type="button" onclick="printStickers()" class="btn flex-1 py-3 bg-green-700 text-white rounded-xl font-semibold"><i class="fa-solid fa-print"></i> طباعة</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Configuration Panel Modal -->
     <div id="configModal" class="modal">
       <div class="modal-content">
@@ -705,7 +746,7 @@
         checkConnectivity();
         setupAutoSyncOnOnline();
 
-        // Handle QR code configuration
+        // Handle QR code configuration - FIXED: Properly handles encrypted PINs
         const configParam = params.get("config");
         if (configParam) {
           try {
@@ -717,13 +758,35 @@
               db.googleSheetURL = configData.googleSheetURL || db.googleSheetURL;
               db.autoSyncEnabled = configData.autoSyncEnabled !== false;
               db.setupCompleted = true;
+              
+              // Apply manager PIN (already encrypted, just copy it)
+              if (configData.managerPin) {
+                db.manager = {
+                  name: configData.managerName || db.manager.name,
+                  pin: configData.managerPin, // Keep encrypted form
+                  phone: db.manager.phone || ""
+                };
+              } else if (configData.managerName) {
+                db.manager.name = configData.managerName;
+              }
+              
+              // Apply workers with their encrypted PINs
+              if (configData.workers && Array.isArray(configData.workers)) {
+                db.workers = configData.workers.map(w => ({
+                  id: Date.now() + Math.random(),
+                  name: w.name || "",
+                  pin: w.pin || "", // Keep encrypted form
+                  role: w.role || "موظف"
+                }));
+              }
+              
               saveData();
               
               if (db.googleSheetURL) {
                 await syncUp(true);
               }
               
-              toast("✅ تم الإعداد التلقائي بنجاح", "success", 4000);
+              toast("✅ تم الإعداد التلقائي بنجاح مع جميع كلمات المرور", "success", 4000);
               showLogin();
               return;
             }
@@ -1494,20 +1557,25 @@
             <button onclick="resetAll()" class="btn w-full py-2.5 bg-gray-50 text-gray-600 rounded-xl text-sm font-semibold">🗑️ مسح الكل</button>
           </div>
           <div class="gift-card p-4"><div class="flex justify-between items-center mb-3"><h3 class="font-bold">👥 الموظفين (${db.workers.length})</h3><button onclick="openWorkerModal()" class="btn-primary px-3 py-1.5 text-sm">➕</button></div><div id="workersList" class="space-y-2 max-h-72 overflow-auto"></div></div>
+        </div>
+        <div class="gift-card p-4 mt-4">
+          <h3 class="font-bold mb-3">🏷️ طباعة الملصقات</h3>
+          <button onclick="openStickerModal()" class="btn w-full py-3 bg-green-600 text-white rounded-xl font-semibold"><i class="fa-solid fa-tags"></i> فتح قسم طباعة الملصقات</button>
         </div>`;
         renderWorkers();
       }
       
-      // Generate QR Code for auto-configuration - FIXED: Does not reset password
+      // Generate QR Code for auto-configuration - FIXED: Includes encrypted PIN
       function generateQRCode() {
         if(!db.googleSheetURL){toast("Configurez d'abord le lien Google Sheets","error");return;}
         
         const configData = {
           shopName: db.shopName,
           managerName: db.manager?.name,
+          managerPin: db.manager?.pin, // Include the PIN (already encrypted in memory after login)
           googleSheetURL: db.googleSheetURL,
-          autoSyncEnabled: db.autoSyncEnabled
-          // NOTE: We do NOT include the PIN in the QR code for security
+          autoSyncEnabled: db.autoSyncEnabled,
+          workers: (db.workers || []).map(w => ({ name: w.name, pin: w.pin, role: w.role })) // Include workers with their PINs
         };
         
         const configStr = JSON.stringify(configData);
@@ -1527,7 +1595,7 @@
             <div class="p-4 sm:p-6 text-center">
               <p class="text-sm text-gray-600 mb-4">Scannez ce code avec un autre appareil pour configuration automatique</p>
               <div id="qrcode" class="flex justify-center mb-4"></div>
-              <p class="text-xs text-orange-600 mb-2">⚠️ Le mot de passe du manager reste inchangé sur l'appareil cible</p>
+              <p class="text-xs text-green-600 mb-2">✅ Les mots de passe seront transférés sécurisés</p>
               <button onclick="navigator.clipboard.writeText('${qrUrl}').then(()=>toast('✅ Lien copié'))" class="btn w-full py-3 bg-purple-600 text-white rounded-xl font-bold">📋 Copier le lien</button>
             </div>
           </div>
@@ -1828,6 +1896,134 @@
       
       // Initialize online event listener for auto-sync
       window.addEventListener('online', handleOnlineSync);
+      
+      // ====================== STICKER PRINTER FUNCTIONS ======================
+      function openStickerModal() {
+        const select = document.getElementById('stickerProductSelect');
+        if (!select) return;
+        
+        // Populate product dropdown
+        select.innerHTML = '<option value="">-- اختر منتج --</option>' + 
+          db.products.map(p => `<option value="${p.id}">${p.name} (${p.barcode})</option>`).join('');
+        
+        // Reset form
+        document.getElementById('stickerQuantity').value = '1';
+        document.getElementById('showName').checked = true;
+        document.getElementById('showPrice').checked = true;
+        document.getElementById('showBarcode').checked = true;
+        document.getElementById('showCategory').checked = false;
+        document.getElementById('stickerPreview').innerHTML = '<p class="text-gray-400 text-sm">اختر منتج للمعاينة</p>';
+        
+        openModal('stickerModal');
+      }
+      
+      function updateStickerPreview() {
+        const productId = document.getElementById('stickerProductSelect').value;
+        const quantity = parseInt(document.getElementById('stickerQuantity').value) || 1;
+        const showName = document.getElementById('showName').checked;
+        const showPrice = document.getElementById('showPrice').checked;
+        const showBarcode = document.getElementById('showBarcode').checked;
+        const showCategory = document.getElementById('showCategory').checked;
+        
+        const preview = document.getElementById('stickerPreview');
+        if (!productId) {
+          preview.innerHTML = '<p class="text-gray-400 text-sm">اختر منتج للمعاينة</p>';
+          return;
+        }
+        
+        const product = db.products.find(p => p.id == productId);
+        if (!product) return;
+        
+        let stickerContent = '';
+        for (let i = 0; i < Math.min(quantity, 5); i++) {
+          stickerContent += `
+            <div style="border: 1px dashed #ccc; padding: 8px; margin: 4px 0; background: white; font-size: 11px;">
+              ${showName ? `<div style="font-weight: bold; margin-bottom: 2px;">${product.name}</div>` : ''}
+              ${showBarcode ? `<div style="font-family: monospace; font-size: 13px; letter-spacing: 1px;">${product.barcode}</div>` : ''}
+              ${showPrice ? `<div style="font-weight: bold; color: #be185d; margin-top: 2px;">${product.retail} دج</div>` : ''}
+              ${showCategory ? `<div style="font-size: 9px; color: #666; margin-top: 1px;">${product.category}</div>` : ''}
+            </div>
+          `;
+        }
+        
+        if (quantity > 5) {
+          stickerContent += `<div style="text-align: center; color: #999; font-size: 10px; margin-top: 4px;">... و ${quantity - 5} ملصقات أخرى</div>`;
+        }
+        
+        preview.innerHTML = stickerContent;
+      }
+      
+      function printStickers() {
+        const productId = document.getElementById('stickerProductSelect').value;
+        const quantity = parseInt(document.getElementById('stickerQuantity').value) || 1;
+        
+        if (!productId) {
+          toast('⚠️ اختر منتج أولاً', 'error');
+          return;
+        }
+        
+        const product = db.products.find(p => p.id == productId);
+        if (!product) return;
+        
+        const showName = document.getElementById('showName').checked;
+        const showPrice = document.getElementById('showPrice').checked;
+        const showBarcode = document.getElementById('showBarcode').checked;
+        const showCategory = document.getElementById('showCategory').checked;
+        
+        // Generate sticker HTML
+        let stickersHTML = '';
+        for (let i = 0; i < quantity; i++) {
+          stickersHTML += `
+            <div style="page-break-inside: avoid; border: 1px solid #000; padding: 10px; margin: 5px 0; width: 80mm; font-size: 12px; font-family: Arial, sans-serif;">
+              ${showName ? `<div style="font-weight: bold; margin-bottom: 3px; font-size: 14px;">${product.name}</div>` : ''}
+              ${showBarcode ? `<div style="font-family: 'Courier New', monospace; font-size: 16px; letter-spacing: 2px; text-align: center; margin: 5px 0;">${product.barcode}</div>` : ''}
+              ${showPrice ? `<div style="font-weight: bold; color: #be185d; font-size: 16px; text-align: right; margin-top: 3px;">${product.retail} دج</div>` : ''}
+              ${showCategory ? `<div style="font-size: 10px; color: #666; margin-top: 2px;">${product.category}</div>` : ''}
+            </div>
+          `;
+        }
+        
+        // Create hidden iframe for printing
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+        
+        const doc = iframe.contentWindow.document;
+        doc.open();
+        doc.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>ملصقات الباركود - ${product.name}</title>
+            <style>
+              @media print {
+                @page { margin: 10mm; size: auto; }
+                body { margin: 0; padding: 0; }
+              }
+              body { font-family: Arial, sans-serif; }
+            </style>
+          </head>
+          <body>
+            ${stickersHTML}
+            <script>
+              window.onload = function() {
+                window.print();
+                setTimeout(function() { document.body.parentNode.removeChild(document.body); }, 1000);
+              };
+            <\/script>
+          </body>
+          </html>
+        `);
+        doc.close();
+        
+        closeModal('stickerModal');
+        toast(`✅ جاري طباعة ${quantity} ملصق`, 'success');
+      }
       
       setInterval(updateSyncInd, 60000);
       document.addEventListener("gesturestart",e=>e.preventDefault());
