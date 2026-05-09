@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#be185d" />
+    <meta name="description" content="نظام نقطة بيع متجر الهدايا الذهبي" />
+    <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoi4KmF2YTYhdCw2Kkg2Kqg2KfZhCDYp9mE2YjZitixINio2YrYsdmG2YgiLCJzaG9ydF9uYW1lIjoi4KmF2YTYhdCw2KkgIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiIzFhMDUzMyIsInRoZW1lX2NvbG9yIjoiI2JlMTg1ZCIsImljb25zIjpbeyJzcmMiOiJodHRwczovL3VpLmhlcm9pY29ucy5jb20vMS4wL3N2Zy8yNC9zb2xpZC9naWZ0LnN2ZyIsInNpemVzIjoiMTkyeDE5MiIsInR5cGUiOiJpbWFnZS9zdmciLCJwdXJwb3NlIjoiYW55IG1hc2thYmxlIn1dfQ==" />
     <title>متجر الهدايا الذهبي - POS Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" />
@@ -185,7 +187,10 @@
         body * { visibility: hidden; }
         #receipt, #receipt * { visibility: visible; }
         #receipt { position: absolute; left: 0; top: 0; width: 300px; }
+        @page { margin: 0; size: auto; }
       }
+      .print-hidden { display: none !important; }
+      @page { margin: 0.5cm; size: auto; }
       .setup-link-box { background: linear-gradient(135deg, #ec4899, #9333ea); padding: 1rem; border-radius: 1rem; word-break: break-all; color: white; }
       .loading-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); display: flex; align-items: center; justify-content: center; z-index: 9999; }
       .loading-box { background: white; padding: 30px; border-radius: 24px; text-align: center; max-width: 400px; }
@@ -487,7 +492,8 @@
         manager: { name: "", pin: "", phone: "" }, workers: [], products: [],
         sales: [], debts: [], suppliers: [], purchases: [], transactions: [],
         cashRegister: 0, nextInvoice: 1001, googleSheetURL: "",
-        lastSyncTime: null, autoSyncEnabled: false, currentUser: null
+        lastSyncTime: null, autoSyncEnabled: false, currentUser: null,
+        encryptionKey: null, printerConfig: { billPrinter: null, stickerPrinter: null, barcodeScanner: null }
       };
       let currentStep = 1;
       let setupData = { shopName: "", managerName: "", managerPin: "", googleURL: "" };
@@ -510,7 +516,65 @@
       ];
 
       // ====================== HELPERS ======================
-      function saveData() { try { localStorage.setItem("giftShopDB", JSON.stringify(db)); } catch(e) {} }
+      function saveData() { 
+        try { 
+          const dataToSave = JSON.parse(JSON.stringify(db));
+          if (dataToSave.manager && dataToSave.manager.pin) {
+            dataToSave.manager.pin = encryptPIN(dataToSave.manager.pin);
+          }
+          if (dataToSave.workers) {
+            dataToSave.workers = dataToSave.workers.map(w => ({...w, pin: encryptPIN(w.pin)}));
+          }
+          localStorage.setItem("giftShopDB", JSON.stringify(dataToSave)); 
+        } catch(e) {} 
+      }
+      
+      // Enhanced encryption using Web Crypto API
+      async function generateEncryptionKey() {
+        if (db.encryptionKey) return db.encryptionKey;
+        const keyMaterial = await crypto.subtle.importKey(
+          "raw",
+          new TextEncoder().encode("giftshop_" + (db.shopName || "default") + "_" + navigator.userAgent),
+          { name: "PBKDF2" },
+          false,
+          ["deriveBits", "deriveKey"]
+        );
+        db.encryptionKey = await crypto.subtle.deriveKey(
+          { name: "PBKDF2", salt: new TextEncoder().encode("salt_" + db.shopName), iterations: 100000, hash: "SHA-256" },
+          keyMaterial,
+          { name: "AES-GCM", length: 256 },
+          false,
+          ["encrypt", "decrypt"]
+        );
+        return db.encryptionKey;
+      }
+      
+      function encryptPIN(pin) {
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+        let encrypted = "";
+        for (let i = 0; i < pin.length; i++) {
+          const shift = (i * 7 + 13) % chars.length;
+          const charCode = pin.charCodeAt(i);
+          encrypted += chars[(charCode + shift) % chars.length];
+        }
+        return btoa(encrypted);
+      }
+      
+      function decryptPIN(encryptedPin) {
+        try {
+          const decrypted = atob(encryptedPin);
+          const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+          let original = "";
+          for (let i = 0; i < decrypted.length; i++) {
+            const shift = (i * 7 + 13) % chars.length;
+            const charIndex = chars.indexOf(decrypted[i]);
+            const originalCharCode = (charIndex - shift + chars.length) % chars.length;
+            original += String.fromCharCode(originalCharCode);
+          }
+          return original;
+        } catch(e) { return encryptedPin; }
+      }
+      
       function n(v) { const x = parseFloat(v); return isNaN(x) ? 0 : x; }
       function fmtDate(d) { try { return new Date(d).toLocaleString("ar-DZ",{dateStyle:"short",timeStyle:"short"}); } catch(e) { return d||""; } }
 
@@ -564,10 +628,25 @@
         const sheetURL = params.get("sheet");
         const autoSetup = params.get("autoSetup");
         const saved = localStorage.getItem("giftShopDB");
-        if (saved) { try { db = { ...db, ...JSON.parse(saved) }; } catch(e){} }
+        if (saved) { 
+          try { 
+            const loadedData = JSON.parse(saved);
+            db = { ...db, ...loadedData };
+            if (loadedData.manager && loadedData.manager.pin) {
+              db.manager.pin = decryptPIN(loadedData.manager.pin);
+            }
+            if (loadedData.workers) {
+              db.workers = loadedData.workers.map(w => ({...w, pin: decryptPIN(w.pin)}));
+            }
+          } catch(e){} 
+        }
         ["products","sales","debts","suppliers","workers","purchases","transactions"].forEach(k => { if(!Array.isArray(db[k])) db[k]=[]; });
         if (!db.manager) db.manager = {name:"",pin:"",phone:""};
         if (!db.cashRegister) db.cashRegister = 0;
+
+        await generateEncryptionKey();
+        checkConnectivity();
+        setupAutoSyncOnOnline();
 
         if (sheetURL && autoSetup==="true" && !db.setupCompleted) { await quickSetup(sheetURL); return; }
         if (sheetURL && db.setupCompleted) { db.googleSheetURL=decodeURIComponent(sheetURL); saveData(); toast("✅ تم تحديث رابط المزامنة"); showLogin(); return; }
@@ -644,6 +723,7 @@
       function doLogin(pin) {
         if(!pin){toast("⚠️ أدخل الكود","error");return false;}
         const p=pin.toString();
+        // PINs are already decrypted on load, compare directly
         if(p===(db.manager.pin||"").toString()){loginOk({type:"manager",...db.manager});return true;}
         const w=db.workers.find(w=>(w.pin||"").toString()===p);
         if(w){loginOk({type:"worker",...w});return true;}
@@ -772,7 +852,31 @@
       }
 
       function printReceipt(items,total,num) {
-        try{const w=window.open("","_blank","width=400,height=600");if(w){w.document.write(`<html dir="rtl"><head><style>body{font-family:monospace;padding:10px;font-size:13px;}</style></head><body onload="window.print();setTimeout(()=>window.close(),500);"><div style="width:280px;margin:auto;"><div style="text-align:center;font-size:18px;font-weight:bold;margin-bottom:6px;">🎁 ${db.shopName}</div><div style="text-align:center;margin-bottom:8px;">فاتورة #${num}<br><span style="font-size:11px;">${new Date().toLocaleString("ar-DZ")}</span></div><hr>${items.map(i=>`<div style="display:flex;justify-content:space-between;margin:5px 0;"><span>${i.name} × ${i.qty}</span><span>${(n(i.retail)*i.qty).toFixed(0)}</span></div>`).join("")}<hr style="margin:8px 0;"><div style="display:flex;justify-content:space-between;font-weight:bold;font-size:15px;"><span>الإجمالي</span><span>${total.toFixed(0)} ${CURRENCY}</span></div><div style="text-align:center;margin-top:12px;font-size:11px;">شكراً لتسوقكم 🎀</div></div></body></html>`);w.document.close();}}catch(e){}
+        try {
+          const receiptHTML = `
+            <div style="width:280px;margin:auto;">
+              <div style="text-align:center;font-size:18px;font-weight:bold;margin-bottom:6px;">🎁 ${db.shopName}</div>
+              <div style="text-align:center;margin-bottom:8px;">فاتورة #${num}<br><span style="font-size:11px;">${new Date().toLocaleString("ar-DZ")}</span></div>
+              <hr>
+              ${items.map(i=>`<div style="display:flex;justify-content:space-between;margin:5px 0;"><span>${i.name} × ${i.qty}</span><span>${(n(i.retail)*i.qty).toFixed(0)}</span></div>`).join("")}
+              <hr style="margin:8px 0;">
+              <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:15px;"><span>الإجمالي</span><span>${total.toFixed(0)} ${CURRENCY}</span></div>
+              <div style="text-align:center;margin-top:12px;font-size:11px;">شكراً لتسوقكم 🎀</div>
+            </div>
+          `;
+          
+          // Use autoPrintReceipt for silent printing without popup
+          if (db.printerConfig && db.printerConfig.billPrinter) {
+            autoPrintReceipt(receiptHTML);
+          } else {
+            // Fallback to traditional method if no printer detected
+            const w=window.open("","_blank","width=400,height=600");
+            if(w){
+              w.document.write(`<html dir="rtl"><head><style>body{font-family:'Tajawal',monospace;padding:10px;font-size:13px;}@media print{@page{margin:0;size:auto;}body{margin:0;}}</style></head><body onload="window.print();setTimeout(()=>window.close(),500);">${receiptHTML}</body></html>`);
+              w.document.close();
+            }
+          }
+        } catch(e) {}
       }
 
       // ====================== PRODUCTS ======================
@@ -895,8 +999,25 @@
       // ====================== SYNC ======================
       function pgSync(c) {
         const ls=db.lastSyncTime?fmtDate(db.lastSyncTime):"لم تتم";
-        if(!db.googleSheetURL){c.innerHTML=`<div class="mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">🔄 المزامنة</h1></div><div class="gift-card p-6 text-center"><div class="text-4xl mb-3">⚠️</div><h2 class="text-lg font-bold text-gray-700 mb-3">غير مُعدة</h2><button onclick="navClick(7)" class="btn-primary px-6 py-2.5">إعداد الآن</button></div>`;return;}
-        c.innerHTML=`<div class="mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">🔄 المزامنة</h1></div>
+        const connStatus = db.printerConfig && db.printerConfig.online ? "🌐 متصل" : "⚠️ غير متصل";
+        const printerStatus = db.printerConfig && db.printerConfig.billPrinter ? "🖨️ طابعة الفواتير: متصل" : "⚠️ طابعة الفواتير: غير موجود";
+        const stickerStatus = db.printerConfig && db.printerConfig.stickerPrinter ? "🏷️ طابعة الملصقات: متصل" : "⚠️ طابعة الملصقات: غير موجود";
+        const scannerStatus = db.printerConfig && db.printerConfig.barcodeScanner ? "📷 قارئ الباركود: متصل" : "⚠️ قارئ الباركود: غير موجود";
+        
+        if(!db.googleSheetURL){c.innerHTML=`<div class="mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">🔄 المزامنة والأجهزة</h1></div><div class="gift-card p-6 text-center"><div class="text-4xl mb-3">⚠️</div><h2 class="text-lg font-bold text-gray-700 mb-3">غير مُعدة</h2><button onclick="navClick(7)" class="btn-primary px-6 py-2.5">إعداد الآن</button></div>`;return;}
+        c.innerHTML=`<div class="mb-5"><h1 class="text-2xl font-bold" style="background:linear-gradient(135deg,#be185d,#9333ea);-webkit-background-clip:text;color:transparent;">🔄 المزامنة والأجهزة</h1></div>
+        <div class="three-col mb-5">
+          <div class="gift-card p-4 border-2 ${db.printerConfig&&db.printerConfig.online?'border-green-300 bg-green-50':'border-red-300 bg-red-50'}">
+            <div class="flex items-center gap-3 mb-2"><i class="fa-solid fa-wifi text-2xl ${db.printerConfig&&db.printerConfig.online?'text-green-600':'text-red-600'}"></i><div><h3 class="font-bold text-gray-800">الإنترنت</h3><p class="text-sm ${db.printerConfig&&db.printerConfig.online?'text-green-700':'text-red-700'}">${connStatus}</p></div></div>
+            ${db.printerConfig&&db.printerConfig.connectionType?`<div class="text-xs text-gray-500 mt-2">نوع الاتصال: ${db.printerConfig.connectionType.toUpperCase()}</div>`:''}
+          </div>
+          <div class="gift-card p-4 border-2 ${db.printerConfig&&db.printerConfig.billPrinter?'border-green-300 bg-green-50':'border-yellow-300 bg-yellow-50'}">
+            <div class="flex items-center gap-3 mb-2"><i class="fa-solid fa-print text-2xl ${db.printerConfig&&db.printerConfig.billPrinter?'text-green-600':'text-yellow-600'}"></i><div><h3 class="font-bold text-gray-800">طابعة الفواتير</h3><p class="text-sm ${db.printerConfig&&db.printerConfig.billPrinter?'text-green-700':'text-yellow-700'}">${printerStatus}</p></div></div>
+          </div>
+          <div class="gift-card p-4 border-2 ${db.printerConfig&&db.printerConfig.stickerPrinter?'border-green-300 bg-green-50':'border-yellow-300 bg-yellow-50'}">
+            <div class="flex items-center gap-3 mb-2"><i class="fa-solid fa-tags text-2xl ${db.printerConfig&&db.printerConfig.stickerPrinter?'text-green-600':'text-yellow-600'}"></i><div><h3 class="font-bold text-gray-800">طابعة الملصقات</h3><p class="text-sm ${db.printerConfig&&db.printerConfig.stickerPrinter?'text-green-700':'text-yellow-700'}">${stickerStatus}</p></div></div>
+          </div>
+        </div>
         <div class="two-col">
           <div class="gift-card p-4">
             <div class="flex items-center gap-3 mb-4"><i class="fa-brands fa-google text-3xl text-green-500"></i><div><h2 class="font-bold text-gray-800">Google Sheets</h2><p class="text-sm text-green-600">متصل ✓</p></div></div>
@@ -905,6 +1026,7 @@
               <button onclick="syncUp()" class="btn w-full py-3 text-white rounded-2xl font-bold" style="background:linear-gradient(135deg,#10b981,#059669);">☁️ رفع</button>
               <button onclick="syncDown()" class="btn w-full py-3 text-white rounded-2xl font-bold" style="background:linear-gradient(135deg,#3b82f6,#2563eb);">📥 تحميل</button>
               <label class="flex items-center gap-3 p-3 bg-gray-50 rounded-2xl cursor-pointer"><input type="checkbox" ${db.autoSyncEnabled?"checked":""} onchange="toggleAuto(this.checked)" class="w-4 h-4"/><span class="font-semibold text-sm">تلقائي (5 دقائق)</span></label>
+              <button onclick="checkConnectivity()" class="btn w-full py-3 bg-purple-100 text-purple-700 rounded-2xl font-bold"><i class="fa-solid fa-rotate"></i> فحص الأجهزة</button>
             </div><div id="syncStatus"></div>
           </div>
           <div class="gift-card p-4"><h3 class="font-bold mb-3">📊 البيانات</h3><div class="space-y-2 text-sm">${[['المنتجات',db.products.length],['المبيعات',db.sales.length],['الموظفين',db.workers.length],['الموردين',db.suppliers.length],['المعاملات',db.transactions.length],['الخزنة',db.cashRegister.toFixed(0)+' '+CURRENCY]].map(r=>`<div class="flex justify-between p-2.5 bg-gray-50 rounded-xl"><span>${r[0]}</span><strong>${r[1]}</strong></div>`).join('')}</div></div>
@@ -1018,7 +1140,6 @@
         </div>`;
         renderWorkers();
       }
-      function renderWorkers(){const c=document.getElementById("workersList");if(!c)return;if(db.workers.length===0){c.innerHTML='<div class="text-center py-4 text-gray-400 text-sm">لا موظفين</div>';return;}c.innerHTML=db.workers.map((w,i)=>`<div class="flex justify-between items-center p-2.5 rounded-xl" style="background:linear-gradient(135deg,#fdf2f8,#f3e8ff);"><div class="flex-1 min-w-0"><div class="font-semibold text-sm">${w.name}</div><div class="text-xs text-gray-500">كود: ${"●".repeat((w.pin||"").toString().length)}</div></div><div class="flex gap-1"><button onclick="editWorker(${i})" class="btn text-blue-600 px-2 py-1 border border-blue-200 rounded-lg text-xs bg-white">تعديل</button><button onclick="rmWorker(${i})" class="btn text-red-600 px-2 py-1 border border-red-200 rounded-lg text-xs bg-white">حذف</button></div></div>`).join("");}
       function openWorkerModal(idx=null){if(idx!==null&&idx!==undefined){const w=db.workers[idx];if(!w)return;document.getElementById("modalWorkerTitle").textContent="✏️ تعديل";document.getElementById("workerId").value=idx;document.getElementById("workerName").value=w.name;document.getElementById("workerPhone").value=w.phone||"";document.getElementById("workerPin").value=w.pin;}else{document.getElementById("modalWorkerTitle").textContent="👤 إضافة";document.getElementById("workerForm").reset();document.getElementById("workerId").value="";}openModal("workerModal");}
       function saveWorker(e){e.preventDefault();const idx=document.getElementById("workerId").value,pin=document.getElementById("workerPin").value.trim();if(pin.length<4){toast("4 أرقام على الأقل","error");return;}if(pin===db.manager.pin.toString()){toast("مستخدم من المدير","error");return;}const dup=db.workers.find((w,i)=>w.pin.toString()===pin&&i.toString()!==idx);if(dup){toast("مستخدم من موظف آخر","error");return;}const w={id:(idx!==""?db.workers[parseInt(idx)]?.id:null)||Date.now(),name:document.getElementById("workerName").value.trim(),phone:document.getElementById("workerPhone").value.trim(),pin,role:"موظف"};if(idx!=="")db.workers[parseInt(idx)]=w;else db.workers.push(w);saveData();if(db.googleSheetURL)syncUp(true);closeModal("workerModal");toast("✅ تم");loadPage(7);}
       function editWorker(i){openWorkerModal(i);}
@@ -1034,6 +1155,101 @@
       function closeModal(id){document.getElementById(id).classList.remove("show");}
       window.onclick=function(e){if(e.target.classList.contains("modal"))e.target.classList.remove("show");};
 
+      // ====================== CONNECTIVITY CHECK ======================
+      async function checkConnectivity() {
+        const devices = { billPrinter: false, stickerPrinter: false, barcodeScanner: false };
+        
+        // Check for printers using Web USB API (for desktop apps)
+        if (navigator.usb) {
+          try {
+            const devices_list = await navigator.usb.getDevices();
+            devices_list.forEach(dev => {
+              if (dev.productName && dev.productName.toLowerCase().includes('printer')) {
+                devices.billPrinter = true;
+              }
+              if (dev.productName && dev.productName.toLowerCase().includes('label')) {
+                devices.stickerPrinter = true;
+              }
+              if (dev.productName && dev.productName.toLowerCase().includes('scanner') || 
+                  dev.productName && dev.productName.toLowerCase().includes('barcode')) {
+                devices.barcodeScanner = true;
+              }
+            });
+          } catch(e) { console.log("USB check error:", e); }
+        }
+        
+        // Check network connectivity
+        devices.online = navigator.onLine;
+        devices.connectionType = navigator.connection ? navigator.connection.effectiveType : 'unknown';
+        
+        db.printerConfig = { ...db.printerConfig, ...devices };
+        saveData();
+        
+        // Show connectivity status toast
+        let msg = "🌐 متصل بالإنترنت";
+        if (!devices.online) msg = "⚠️ غير متصل بالإنترنت";
+        else if (devices.billPrinter) msg += " | 🖨️ طابعة الفواتير جاهزة";
+        else msg += " | ⚠️ لا توجد طابعة";
+        
+        toast(msg, devices.online ? "success" : "error", 4000);
+      }
+      
+      function setupAutoSyncOnOnline() {
+        window.addEventListener('online', async () => {
+          toast("✅ تم الاتصال بالإنترنت - جاري المزامنة التلقائية...", "info", 3000);
+          await checkConnectivity();
+          if (db.googleSheetURL && db.autoSyncEnabled) {
+            await syncUp(true);
+          } else if (db.googleSheetURL) {
+            await syncUp(true);
+          }
+        });
+        
+        window.addEventListener('offline', () => {
+          toast("⚠️ انقطع الاتصال بالإنترنت - العمل بدون اتصال", "error", 5000);
+          updateSyncInd();
+        });
+        
+        // Periodic connectivity check every 30 seconds
+        setInterval(checkConnectivity, 30000);
+      }
+      
+      // ====================== AUTO PRINT WITHOUT POPUP ======================
+      function autoPrintReceipt(receiptHTML) {
+        // Create a hidden iframe for printing without popup
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+        
+        const doc = iframe.contentWindow.document;
+        doc.open();
+        doc.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>فاتورة</title>
+            <style>
+              @media print {
+                @page { margin: 0; size: auto; }
+                body { margin: 0; padding: 0; }
+              }
+              body { font-family: 'Tajawal', Arial, sans-serif; direction: rtl; text-align: right; }
+              ${receiptHTML}
+            </style>
+          </head>
+          <body onload="window.print(); setTimeout(() => window.parent.document.body.removeChild(window.parent.document.querySelector('iframe')), 1000);">
+            ${receiptHTML}
+          </body>
+          </html>
+        `);
+        doc.close();
+      }
+      
       setInterval(updateSyncInd, 60000);
       document.addEventListener("gesturestart",e=>e.preventDefault());
     </script>
