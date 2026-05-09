@@ -1150,6 +1150,29 @@
       function genLink(){if(!db.googleSheetURL){toast("أعد رابط Google أولاً","error");return;}const l=`${location.origin+location.pathname}?sheet=${encodeURIComponent(db.googleSheetURL)}&autoSetup=true`;navigator.clipboard.writeText(l).then(()=>toast("✅ تم النسخ")).catch(()=>prompt("انسخ:",l));}
       function resetAll(){if(confirm("⚠️ مسح جميع البيانات؟")&&confirm("تأكيد نهائي!")){localStorage.removeItem("giftShopDB");location.reload();}}
 
+      // ====================== RENDER WORKERS ======================
+      function renderWorkers(){
+        const container=document.getElementById("workersList");
+        if(!container)return;
+        if(db.workers.length===0){
+          container.innerHTML='<div class="text-center text-gray-400 py-4">لا يوجد موظفين</div>';
+          return;
+        }
+        container.innerHTML=db.workers.map((w,i)=>`
+          <div class="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+            <div class="flex-1">
+              <div class="font-bold text-sm">${w.name}</div>
+              <div class="text-xs text-gray-500">📞 ${w.phone||''}</div>
+              <div class="text-xs text-gray-400">🔑 PIN: ****</div>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="editWorker(${i})" class="btn-primary px-2 py-1 text-xs">✏️</button>
+              <button onclick="rmWorker(${i})" class="bg-red-100 text-red-600 px-2 py-1 rounded-lg text-xs hover:bg-red-200">🗑️</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
       // ====================== MODAL UTILS ======================
       function openModal(id){document.getElementById(id).classList.add("show");}
       function closeModal(id){document.getElementById(id).classList.remove("show");}
@@ -1212,6 +1235,9 @@
         
         // Periodic connectivity check every 30 seconds
         setInterval(checkConnectivity, 30000);
+        
+        // Initial connectivity check on load
+        setTimeout(checkConnectivity, 2000);
       }
       
       // ====================== AUTO PRINT WITHOUT POPUP ======================
@@ -1242,13 +1268,48 @@
               ${receiptHTML}
             </style>
           </head>
-          <body onload="window.print(); setTimeout(() => window.parent.document.body.removeChild(window.parent.document.querySelector('iframe')), 1000);">
+          <body onload="window.print(); setTimeout(() => { try { window.parent.document.body.removeChild(window.parent.document.querySelector('iframe')); } catch(e){} }, 1000);">
             ${receiptHTML}
           </body>
           </html>
         `);
         doc.close();
       }
+      
+      // Enhanced auto-print with direct printer access for desktop apps
+      async function autoPrintDirect(receiptHTML) {
+        if (navigator.usb && db.printerConfig && db.printerConfig.billPrinter) {
+          try {
+            const devices_list = await navigator.usb.getDevices();
+            const printer = devices_list.find(dev => dev.productName && dev.productName.toLowerCase().includes('printer'));
+            if (printer) {
+              await printer.open();
+              await printer.selectConfiguration(1);
+              await printer.claimInterface(0);
+              const encoder = new TextEncoder();
+              const data = encoder.encode(receiptHTML);
+              await printer.transferOut(1, data);
+              await printer.close();
+              return true;
+            }
+          } catch(e) { console.log("Direct print error:", e); }
+        }
+        // Fallback to iframe method
+        autoPrintReceipt(receiptHTML);
+        return false;
+      }
+      
+      // Auto-sync when internet connection is restored
+      async function handleOnlineSync() {
+        if (navigator.onLine && db.googleSheetURL) {
+          toast("✅ تم الاتصال بالإنترنت - جاري المزامنة التلقائية...", "info", 3000);
+          await checkConnectivity();
+          await syncUp(true);
+        }
+      }
+      
+      // Initialize online event listener for auto-sync
+      window.addEventListener('online', handleOnlineSync);
       
       setInterval(updateSyncInd, 60000);
       document.addEventListener("gesturestart",e=>e.preventDefault());
