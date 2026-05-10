@@ -603,6 +603,50 @@
         { icon: "fa-user-tie", color: "text-red-400", label: "المدير" }
       ];
 
+      // ====================== EMPLOYEE TRACKER DATA ======================
+      function getEmployeeStats() {
+        const stats = {};
+        const now = Date.now();
+        const fiveMinAgo = now - (5 * 60 * 1000);
+        
+        // Initialize stats for all workers
+        db.workers.forEach(w => {
+          stats[w.id] = {
+            id: w.id,
+            name: w.name,
+            role: w.role,
+            salesCount: 0,
+            totalRevenue: 0,
+            lastActivity: w.lastActivity || null,
+            isActive: w.lastActivity && (now - new Date(w.lastActivity).getTime()) < fiveMinAgo
+          };
+        });
+        
+        // Add manager stats
+        if (db.manager && db.manager.name) {
+          stats['manager'] = {
+            id: 'manager',
+            name: db.manager.name,
+            role: 'مدير',
+            salesCount: 0,
+            totalRevenue: 0,
+            lastActivity: db.manager.lastActivity || null,
+            isActive: db.manager.lastActivity && (now - new Date(db.manager.lastActivity).getTime()) < fiveMinAgo
+          };
+        }
+        
+        // Calculate stats from sales
+        db.sales.forEach(sale => {
+          const sellerId = sale.sellerId;
+          if (stats[sellerId]) {
+            stats[sellerId].salesCount++;
+            stats[sellerId].totalRevenue += n(sale.total);
+          }
+        });
+        
+        return Object.values(stats);
+      }
+
       // ====================== HELPERS ======================
       function saveData() { 
         try { 
@@ -1033,8 +1077,18 @@
       
       function finalizeSale(isDebt, total) {
         const saleItems=cart.map(c=>({id:c.id,name:c.name,retail:c.retail,cost:c.cost||0,qty:c.qty}));
-        const sale={id:db.nextInvoice++,date:new Date().toISOString(),total,cashier:db.currentUser.name,items:saleItems};
+        const sellerId = db.currentUser?.id || 'manager';
+        const sale={id:db.nextInvoice++,date:new Date().toISOString(),total,cashier:db.currentUser.name,sellerId:sellerId,items:saleItems};
         db.sales.push(sale);
+        // Update last activity for the seller
+        if (db.currentUser) {
+          if (db.currentUser.type === 'manager') {
+            db.manager.lastActivity = new Date().toISOString();
+          } else {
+            const worker = db.workers.find(w => w.id === sellerId);
+            if (worker) worker.lastActivity = new Date().toISOString();
+          }
+        }
         addTx("in",`بيع نقدي #${sale.id}`,total);
         cart.forEach(item=>{const p=db.products.find(x=>x.id===item.id);if(p)p.stock-=item.qty;});
         cart=[]; saveData();
@@ -1050,8 +1104,18 @@
         if(!cust){toast("أدخل اسم المدين","error");return;}
         if(amt<=0){toast("مبلغ غير صالح","error");return;}
         const saleItems=cart.map(c=>({id:c.id,name:c.name,retail:c.retail,cost:c.cost||0,qty:c.qty}));
+        const sellerId = db.currentUser?.id || 'manager';
         db.debts.push({id:Date.now(),customer:cust,phone,amount:amt,paid:0,remaining:amt,date:new Date().toISOString(),items:cart.map(c=>`${c.name}×${c.qty}`).join(", ")});
-        db.sales.push({id:db.nextInvoice++,date:new Date().toISOString(),total:amt,cashier:db.currentUser.name,type:"debt",items:saleItems});
+        db.sales.push({id:db.nextInvoice++,date:new Date().toISOString(),total:amt,cashier:db.currentUser.name,sellerId:sellerId,type:"debt",items:saleItems});
+        // Update last activity for the seller
+        if (db.currentUser) {
+          if (db.currentUser.type === 'manager') {
+            db.manager.lastActivity = new Date().toISOString();
+          } else {
+            const worker = db.workers.find(w => w.id === sellerId);
+            if (worker) worker.lastActivity = new Date().toISOString();
+          }
+        }
         cart.forEach(item=>{const p=db.products.find(x=>x.id===item.id);if(p)p.stock-=item.qty;});
         cart=[]; saveData();
         if(db.googleSheetURL)syncUp(true);
@@ -1468,7 +1532,16 @@
       }
 
       function toggleAuto(on){db.autoSyncEnabled=on;saveData();if(on){startAutoSync();toast("✅ تلقائي مفعّل");}else{stopAutoSync();toast("⏸️ موقف","info");}}
-      function startAutoSync(){stopAutoSync();if(db.googleSheetURL)syncInterval=setInterval(()=>syncUp(true),1000);updateSyncInd();}
+      function startAutoSync(){
+        stopAutoSync();
+        if(db.googleSheetURL){
+          // Sync up every 1 second for live data
+          syncInterval=setInterval(()=>syncUp(true),1000);
+          // Also sync down every 1 second to get updates from other devices
+          setInterval(()=>syncDown(true),1000);
+        }
+        updateSyncInd();
+      }
       function stopAutoSync(){if(syncInterval){clearInterval(syncInterval);syncInterval=null;}}
       function updateSyncInd(){const el=document.getElementById("syncIndicator");if(!el)return;if(db.autoSyncEnabled)el.innerHTML='🔄 تلقائي';else if(db.lastSyncTime)el.innerHTML=`آخر: ${Math.floor((Date.now()-new Date(db.lastSyncTime))/60000)}د`;else el.innerHTML='';}
 
@@ -1486,6 +1559,10 @@
             <button onclick="resetAll()" class="btn w-full py-2.5 bg-gray-50 text-gray-600 rounded-xl text-sm font-semibold">🗑️ مسح الكل</button>
           </div>
           <div class="gift-card p-4"><div class="flex justify-between items-center mb-3"><h3 class="font-bold">👥 الموظفين (${db.workers.length})</h3><button onclick="openWorkerModal()" class="btn-primary px-3 py-1.5 text-sm">➕</button></div><div id="workersList" class="space-y-2 max-h-72 overflow-auto"></div></div>
+        </div>
+        <div class="gift-card p-4 mt-4">
+          <h3 class="font-bold mb-3">📊 تتبع نشاط الموظفين</h3>
+          <button onclick="renderEmployeeTracker()" class="btn w-full py-3 bg-blue-600 text-white rounded-xl font-semibold"><i class="fa-solid fa-chart-line"></i> عرض تقرير النشاط المفصل</button>
         </div>
         <div class="gift-card p-4 mt-4">
           <h3 class="font-bold mb-3">🏷️ طباعة الملصقات</h3>
@@ -1660,6 +1737,55 @@
             </div>
           </div>
         `).join('');
+      }
+
+      // ====================== EMPLOYEE TRACKER UI ======================
+      function renderEmployeeTracker() {
+        const stats = getEmployeeStats();
+        const modal = document.createElement('div');
+        modal.className = 'modal show';
+        modal.id = 'trackerModal';
+        
+        let rows = stats.map(s => `
+          <tr class="border-b border-gray-100 hover:bg-gray-50">
+            <td class="py-3 px-2 text-right font-medium">${s.name}</td>
+            <td class="py-3 px-2 text-right text-sm text-gray-600">${s.role}</td>
+            <td class="py-3 px-2 text-right font-bold text-blue-600">${s.salesCount}</td>
+            <td class="py-3 px-2 text-right font-bold text-green-600">${s.totalRevenue.toFixed(2)} ${CURRENCY}</td>
+            <td class="py-3 px-2 text-right text-xs text-gray-500">${s.lastActivity ? fmtDate(s.lastActivity) : '-'}</td>
+            <td class="py-3 px-2 text-right">${s.isActive ? '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">🟢 نشط</span>' : '<span class="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold">🔴 غير نشط</span>'}</td>
+          </tr>
+        `).join('');
+
+        modal.innerHTML = `
+          <div class="modal-content max-w-4xl">
+            <div class="p-4 sm:p-6 rounded-t-3xl flex justify-between items-center" style="background:linear-gradient(135deg,#be185d,#9333ea)">
+              <h3 class="text-lg font-bold text-white">📊 تتبع نشاط الموظفين - تقرير مفصل</h3>
+              <button onclick="document.getElementById('trackerModal').remove()" class="btn text-white text-2xl bg-transparent">&times;</button>
+            </div>
+            <div class="p-4 sm:p-6">
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-purple-50 text-purple-800 font-bold">
+                    <tr>
+                      <th class="py-3 px-2 text-right">الموظف</th>
+                      <th class="py-3 px-2 text-right">الصلاحية</th>
+                      <th class="py-3 px-2 text-right">عدد المبيعات</th>
+                      <th class="py-3 px-2 text-right">إجمالي المبيعات</th>
+                      <th class="py-3 px-2 text-right">آخر نشاط</th>
+                      <th class="py-3 px-2 text-right">الحالة</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rows}</tbody>
+                </table>
+              </div>
+              <div class="mt-4 p-3 bg-blue-50 rounded-xl text-sm text-blue-700">
+                <i class="fa-solid fa-info-circle"></i> يتم تحديث البيانات تلقائياً كل ثانية عند تفعيل المزامنة التلقائية
+              </div>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
       }
 
       // ====================== MODAL UTILS ======================
