@@ -44,18 +44,29 @@ function doPost(e) {
       // ===== CENTRAL MERGE LOGIC =====
       // Instead of overwriting, we merge data intelligently
       
-      // 1. PRODUCTS: Merge by ID, update existing or add new
+      // ===== CENTRAL MERGE LOGIC =====
+      // Instead of overwriting, we merge data intelligently
+      
+      // 1. PRODUCTS: Merge by ID, update existing or add new (skip empty products)
       var products = data.products || [];
       var productsSheet = sheet.getSheetByName('المنتجات') || sheet.insertSheet('المنتجات');
       var existingProducts = getSheetAsObjects(productsSheet);
       var productMap = {};
       for (var i = 0; i < existingProducts.length; i++) {
-        productMap[existingProducts[i].id] = existingProducts[i];
+        // Skip empty products (no name or no id)
+        if (existingProducts[i].id && existingProducts[i].name && String(existingProducts[i].name).trim() !== '') {
+          productMap[existingProducts[i].id] = existingProducts[i];
+        }
       }
-      
-      // Update with incoming products
+
+      // Update with incoming products (skip empty ones)
       for (var i = 0; i < products.length; i++) {
         var p = products[i];
+        // Skip products with empty names or invalid IDs
+        if (!p.id || !p.name || String(p.name).trim() === '') {
+          Logger.log('⚠️ تخطي منتج فارغ أو بدون اسم: ' + JSON.stringify(p));
+          continue;
+        }
         if (productMap[p.id]) {
           // Update existing - use latest timestamp or incoming data
           productMap[p.id] = Object.assign(productMap[p.id], p);
@@ -64,7 +75,7 @@ function doPost(e) {
           productMap[p.id] = p;
         }
       }
-      
+
       // Rewrite products sheet with merged data
       productsSheet.clear();
       productsSheet.getRange(1, 1, 1, 9).setBackground('#f59e0b').setFontWeight('bold').setFontColor('#ffffff');
