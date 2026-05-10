@@ -464,6 +464,7 @@ function handleGetRequest() {
       
   } catch (error) {
     Logger.log('❌ خطأ في القراءة: ' + error.toString());
+    Logger.log('Stack: ' + error.stack);
     return ContentService
       .createTextOutput(JSON.stringify({
         status: 'error',
