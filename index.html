@@ -638,7 +638,7 @@
         // Calculate stats from sales
         db.sales.forEach(sale => {
           const sellerId = sale.sellerId;
-          if (stats[sellerId]) {
+          if (sellerId && stats[sellerId]) {
             stats[sellerId].salesCount++;
             stats[sellerId].totalRevenue += n(sale.total);
           }
@@ -1532,18 +1532,19 @@
       }
 
       function toggleAuto(on){db.autoSyncEnabled=on;saveData();if(on){startAutoSync();toast("✅ تلقائي مفعّل");}else{stopAutoSync();toast("⏸️ موقف","info");}}
+      let syncDownInterval = null;
       function startAutoSync(){
         stopAutoSync();
         if(db.googleSheetURL){
           // Sync up every 1 second for live data
           syncInterval=setInterval(()=>syncUp(true),1000);
           // Also sync down every 1 second to get updates from other devices
-          setInterval(()=>syncDown(true),1000);
+          syncDownInterval=setInterval(()=>syncDown(true),1000);
         }
         updateSyncInd();
       }
-      function stopAutoSync(){if(syncInterval){clearInterval(syncInterval);syncInterval=null;}}
-      function updateSyncInd(){const el=document.getElementById("syncIndicator");if(!el)return;if(db.autoSyncEnabled)el.innerHTML='🔄 تلقائي';else if(db.lastSyncTime)el.innerHTML=`آخر: ${Math.floor((Date.now()-new Date(db.lastSyncTime))/60000)}د`;else el.innerHTML='';}
+      function stopAutoSync(){if(syncInterval){clearInterval(syncInterval);syncInterval=null;}if(syncDownInterval){clearInterval(syncDownInterval);syncDownInterval=null;}}
+      function updateSyncInd(){const el=document.getElementById("syncIndicator");if(!el)return;if(db.autoSyncEnabled)el.innerHTML='🔄 تلقائي';else if(db.lastSyncTime){const mins=Math.floor((Date.now()-new Date(db.lastSyncTime))/60000);el.innerHTML=`آخر: ${mins}د`;}}
 
       // ====================== MANAGER ======================
       function pgManager(c) {
