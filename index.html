@@ -1069,9 +1069,21 @@
           return;
         }
         
+        // Close the popup first
         closeChangePopup();
+        
+        // Execute the callback directly with proper context
         if (window.confirmSaleCallback) {
-          window.confirmSaleCallback();
+          try {
+            window.confirmSaleCallback();
+          } catch (e) {
+            console.error('Error in confirmSaleCallback:', e);
+            toast('❌ خطأ في تأكيد البيع', 'error');
+          }
+          window.confirmSaleCallback = null;
+        } else {
+          // Fallback: call finalizeSale directly
+          finalizeSale(false, total);
         }
       }
       
@@ -1533,6 +1545,8 @@
 
       function toggleAuto(on){db.autoSyncEnabled=on;saveData();if(on){startAutoSync();toast("✅ تلقائي مفعّل");}else{stopAutoSync();toast("⏸️ موقف","info");}}
       let syncDownInterval = null;
+      let lastSyncedDataHash = null;
+      
       function startAutoSync(){
         stopAutoSync();
         if(db.googleSheetURL){
@@ -1545,7 +1559,79 @@
       }
       function stopAutoSync(){if(syncInterval){clearInterval(syncInterval);syncInterval=null;}if(syncDownInterval){clearInterval(syncDownInterval);syncDownInterval=null;}}
       function updateSyncInd(){const el=document.getElementById("syncIndicator");if(!el)return;if(db.autoSyncEnabled)el.innerHTML='🔄 تلقائي';else if(db.lastSyncTime){const mins=Math.floor((Date.now()-new Date(db.lastSyncTime))/60000);el.innerHTML=`آخر: ${mins}د`;}}
-
+      
+      // Calculate hash of current data for change detection
+      function calculateDataHash() {
+        const dataStr = JSON.stringify({
+          products: db.products?.length || 0,
+          sales: db.sales?.length || 0,
+          debts: db.debts?.length || 0,
+          suppliers: db.suppliers?.length || 0,
+          workers: db.workers?.length || 0,
+          purchases: db.purchases?.length || 0,
+          transactions: db.transactions?.length || 0,
+          cashRegister: db.cashRegister || 0,
+          nextInvoice: db.nextInvoice || 0
+        });
+        return btoa(unescape(encodeURIComponent(dataStr)));
+      }
+      
+      // Enhanced syncDown that only updates when data changes
+      async function syncDown(silent=false) {
+        if(!db.googleSheetURL){if(!silent)toast("⚠️ لا رابط","error");return;}
+        const st=document.getElementById("syncStatus");
+        if(st && !silent)st.innerHTML=`<div class="sync-loading">📥 تحميل...</div>`;
+        try {
+          const r=await fetch(db.googleSheetURL+"?action=get");const d=await r.json();
+          if(d.status==="success"&&d.hasData){
+            // Calculate hash of remote data
+            const remoteHash = calculateRemoteHash(d);
+            
+            // Only proceed if data has changed
+            if (remoteHash === lastSyncedDataHash && silent) {
+              // No changes detected, skip update in silent mode
+              return;
+            }
+            
+            if(!silent && !confirm(`استبدال البيانات؟\n${(d.products||[]).length} منتج | ${(d.sales||[]).length} عملية`)){if(st)st.innerHTML=`<div class="sync-error">تم الإلغاء</div>`;return;}
+            if(d.shopName)db.shopName=d.shopName;
+            if(d.manager?.name){
+              // No decryption needed - PINs are now plain text
+              db.manager={name:d.manager.name,pin:d.manager.pin||"",phone:d.manager.phone||""};
+            }
+            if(d.cashRegister!==undefined)db.cashRegister=n(d.cashRegister);
+            ["products","sales","debts","suppliers","workers","purchases","transactions"].forEach(k=>{
+              if(d[k]){
+                db[k]=d[k];
+                // Worker PINs are already plain text - no decryption needed
+              }
+            });
+            if(d.nextInvoice)db.nextInvoice=d.nextInvoice;
+            db.lastSyncTime=new Date().toISOString();saveData();
+            lastSyncedDataHash = remoteHash;
+            if(st && !silent)st.innerHTML=`<div class="sync-success">✅ تم التحميل!</div>`;
+            if(!silent){toast("✅ تم تحميل البيانات");loadPage(activePage);}
+            else{loadPage(activePage);}
+          }else{if(!silent){if(st)st.innerHTML=`<div class="sync-error">⚠️ لا بيانات</div>`;toast("لا بيانات","error");}}
+        }catch(err){if(!silent){if(st)st.innerHTML=`<div class="sync-error">❌ ${err.message}</div>`;toast("❌ فشل","error");}}
+      }
+      
+      // Calculate hash of remote data for comparison
+      function calculateRemoteHash(d) {
+        const dataStr = JSON.stringify({
+          products: d.products?.length || 0,
+          sales: d.sales?.length || 0,
+          debts: d.debts?.length || 0,
+          suppliers: d.suppliers?.length || 0,
+          workers: d.workers?.length || 0,
+          purchases: d.purchases?.length || 0,
+          transactions: d.transactions?.length || 0,
+          cashRegister: d.cashRegister || 0,
+          nextInvoice: d.nextInvoice || 0
+        });
+        return btoa(unescape(encodeURIComponent(dataStr)));
+      }
+      
       // ====================== MANAGER ======================
       function pgManager(c) {
         if(db.currentUser?.type!=="manager"){c.innerHTML=`<div class="text-center py-20"><div class="text-5xl mb-4">🔒</div><h2 class="text-xl font-bold text-gray-600">للمدير فقط</h2></div>`;return;}
