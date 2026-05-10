@@ -655,6 +655,37 @@
         } catch(e) {} 
       }
       
+      // Save only specific data types (for conflict-free sync)
+      function saveLocalData(type, data) {
+        try {
+          const localKey = 'pos_local_' + type;
+          const localData = JSON.parse(localStorage.getItem(localKey) || '[]');
+          if (Array.isArray(data)) {
+            // Merge arrays by ID
+            const existingIds = {};
+            localData.forEach(item => existingIds[item.id] = true);
+            data.forEach(item => {
+              if (!existingIds[item.id]) localData.push(item);
+            });
+          }
+          localStorage.setItem(localKey, JSON.stringify(localData));
+        } catch(e) {}
+      }
+      
+      // Get locally saved data that hasn't been synced yet
+      function getLocalData(type) {
+        try {
+          return JSON.parse(localStorage.getItem('pos_local_' + type) || '[]');
+        } catch(e) { return []; }
+      }
+      
+      // Clear local data after successful sync
+      function clearLocalData(type) {
+        try {
+          localStorage.removeItem('pos_local_' + type);
+        } catch(e) {}
+      }
+      
       // ====================== UTILS (NO ENCRYPTION) ======================
       // Encryption disabled for cross-device compatibility - PINs stored in plain text
       function encryptPIN(pin) { return pin; }
@@ -1110,7 +1141,10 @@
         addTx("in",`بيع نقدي #${sale.id}`,total);
         cart.forEach(item=>{const p=db.products.find(x=>x.id===item.id);if(p)p.stock-=item.qty;});
         cart=[]; saveData();
-        if(db.googleSheetURL)syncUp(true);
+        // Save sale locally first for conflict-free sync
+        saveLocalData('sales', [sale]);
+        // Sync in background - server will handle merging
+        if(db.googleSheetURL) setTimeout(() => syncUp(true), 500);
         sndOk(); toast(`✅ فاتورة #${sale.id} - ${total.toFixed(0)} ${CURRENCY}`);
         printReceipt(sale.items,total,sale.id);
         loadPage(0);
@@ -1123,7 +1157,8 @@
         if(amt<=0){toast("مبلغ غير صالح","error");return;}
         const saleItems=cart.map(c=>({id:c.id,name:c.name,retail:c.retail,cost:c.cost||0,qty:c.qty}));
         const sellerId = db.currentUser?.id || 'manager';
-        db.debts.push({id:Date.now(),customer:cust,phone,amount:amt,paid:0,remaining:amt,date:new Date().toISOString(),items:cart.map(c=>`${c.name}×${c.qty}`).join(", ")});
+        const debtItem={id:Date.now(),customer:cust,phone,amount:amt,paid:0,remaining:amt,date:new Date().toISOString(),items:cart.map(c=>`${c.name}×${c.qty}`).join(", ")};
+        db.debts.push(debtItem);
         db.sales.push({id:db.nextInvoice++,date:new Date().toISOString(),total:amt,cashier:db.currentUser.name,sellerId:sellerId,type:"debt",items:saleItems});
         // Update last activity for the seller
         if (db.currentUser) {
@@ -1136,7 +1171,9 @@
         }
         cart.forEach(item=>{const p=db.products.find(x=>x.id===item.id);if(p)p.stock-=item.qty;});
         cart=[]; saveData();
-        if(db.googleSheetURL)syncUp(true);
+        // Save locally for conflict-free sync
+        saveLocalData('debts', [debtItem]);
+        if(db.googleSheetURL) setTimeout(() => syncUp(true), 500);
         closeModal("debtModal"); sndOk(); toast(`✅ دين ${amt.toFixed(0)} ${CURRENCY} - ${cust}`);
         loadPage(0);
       }
@@ -1453,6 +1490,16 @@
         </div>`;
       }
 
+      // Generate unique device ID (stored in localStorage for persistence)
+      function getDeviceId() {
+        let deviceId = localStorage.getItem('pos_device_id');
+        if (!deviceId) {
+          deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+          localStorage.setItem('pos_device_id', deviceId);
+        }
+        return deviceId;
+      }
+
       async function syncUp(silent=false) {
         if(!db.googleSheetURL){if(!silent)toast("⚠️ لا رابط","error");return;}
         const st=document.getElementById("syncStatus");
@@ -1461,6 +1508,7 @@
           // No encryption - send PINs as plain text for cross-device compatibility
           const payload = {
             action: "sync",
+            deviceId: getDeviceId(),
             shopName: db.shopName || "متجر الهدايا الذهبي",
             manager: {
               name: db.manager?.name || "",
@@ -1556,10 +1604,10 @@
       function startAutoSync(){
         stopAutoSync();
         if(db.googleSheetURL){
-          // Sync up every 1 second for live data
-          syncInterval=setInterval(()=>syncUp(true),1000);
-          // Also sync down every 1 second to get updates from other devices
-          syncDownInterval=setInterval(()=>syncDown(true),1000);
+          // Sync up every 3 seconds for live data (reduced frequency to prevent API limits)
+          syncInterval=setInterval(()=>syncUp(true),3000);
+          // Also sync down every 5 seconds to get updates from other devices
+          syncDownInterval=setInterval(()=>syncDown(true),5000);
           // Initial sync to ensure latest data
           setTimeout(() => {
             syncDown(true);
@@ -1587,7 +1635,7 @@
         return btoa(unescape(encodeURIComponent(dataStr)));
       }
       
-      // Enhanced syncDown that only updates when data changes
+      // Enhanced syncDown that only updates when data changes (smart merge)
       async function syncDown(silent=false) {
         if(!db.googleSheetURL){if(!silent)toast("⚠️ لا رابط","error");return;}
         const st=document.getElementById("syncStatus");
@@ -1604,26 +1652,48 @@
               return;
             }
             
-            if(!silent && !confirm(`استبدال البيانات؟\n${(d.products||[]).length} منتج | ${(d.sales||[]).length} عملية`)){if(st)st.innerHTML=`<div class="sync-error">تم الإلغاء</div>`;return;}
+            // Smart merge: don't overwrite local sales with remote ones blindly
+            // Instead, merge new sales from remote while keeping local unsynced sales
             if(d.shopName)db.shopName=d.shopName;
             if(d.manager?.name){
-              // No decryption needed - PINs are now plain text
               db.manager={name:d.manager.name,pin:d.manager.pin||"",phone:d.manager.phone||""};
             }
             if(d.cashRegister!==undefined)db.cashRegister=n(d.cashRegister);
-            ["products","sales","debts","suppliers","workers","purchases","transactions"].forEach(k=>{
-              if(d[k]){
-                db[k]=d[k];
-                // Worker PINs are already plain text - no decryption needed
+            
+            // Merge products by ID (keep latest version)
+            if(d.products && d.products.length > 0) {
+              const remoteProductMap = {};
+              d.products.forEach(p => remoteProductMap[p.id] = p);
+              db.products = db.products.filter(p => !remoteProductMap[p.id]);
+              db.products = db.products.concat(d.products);
+            }
+            
+            // Merge sales - add only those not already present locally
+            if(d.sales && d.sales.length > 0) {
+              const localSalesIds = {};
+              db.sales.forEach(s => localSalesIds[s.id] = true);
+              d.sales.forEach(s => {
+                if(!localSalesIds[s.id]) db.sales.push(s);
+              });
+            }
+            
+            // Merge other arrays similarly
+            ["debts","suppliers","workers","purchases","transactions"].forEach(k=>{
+              if(d[k] && d[k].length > 0) {
+                const localIds = {};
+                if(db[k]) db[k].forEach(item => localIds[item.id] = true);
+                d[k].forEach(item => {
+                  if(!localIds[item.id]) db[k].push(item);
+                });
               }
             });
+            
             if(d.nextInvoice)db.nextInvoice=d.nextInvoice;
             db.lastSyncTime=new Date().toISOString();saveData();
             lastSyncedDataHash = remoteHash;
             if(st && !silent)st.innerHTML=`<div class="sync-success">✅ تم التحميل!</div>`;
             if(!silent){toast("✅ تم تحميل البيانات");loadPage(activePage);}
             else{
-              // In silent mode, just refresh the current page without toast
               loadPage(activePage);
             }
           }else{if(!silent){if(st)st.innerHTML=`<div class="sync-error">⚠️ لا بيانات</div>`;toast("لا بيانات","error");}}

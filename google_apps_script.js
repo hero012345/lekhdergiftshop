@@ -18,55 +18,91 @@ function doPost(e) {
     
     Logger.log('=== بداية المزامنة ===');
     Logger.log('Action: ' + data.action);
+    Logger.log('Device ID: ' + (data.deviceId || 'unknown'));
     
     if (data.action === 'sync') {
+      // NEW: Incremental sync with device-specific tracking
+      var deviceId = data.deviceId || 'default_' + new Date().toISOString().slice(0,10);
+      var syncTime = data.timestamp || new Date().toISOString();
+      
+      // Get or create device-specific sheet for tracking
+      var deviceSheetName = 'جهاز_' + deviceId.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 20);
+      var deviceSheet = sheet.getSheetByName(deviceSheetName);
+      if (!deviceSheet) {
+        deviceSheet = sheet.insertSheet(deviceSheetName);
+        deviceSheet.getRange(1, 1, 1, 3).setBackground('#6b7280').setFontWeight('bold').setFontColor('#ffffff');
+        deviceSheet.appendRow(['التوقيت', 'النوع', 'البيانات']);
+      }
+      
+      // Log this device's sync attempt
+      deviceSheet.appendRow([syncTime, 'full_sync', JSON.stringify({
+        productsCount: (data.products || []).length,
+        salesCount: (data.sales || []).length,
+        cashRegister: data.cashRegister || 0
+      })]);
+      
+      // ===== CENTRAL MERGE LOGIC =====
+      // Instead of overwriting, we merge data intelligently
+      
+      // 1. PRODUCTS: Merge by ID, update existing or add new
       var products = data.products || [];
-      var sales = data.sales || [];
-      var debts = data.debts || [];
-      var suppliers = data.suppliers || [];
-      var workers = data.workers || [];
-      var purchases = data.purchases || [];
-      var transactions = data.transactions || [];
-      
-      Logger.log('عدد المنتجات: ' + products.length);
-      Logger.log('عدد المبيعات: ' + sales.length);
-      Logger.log('عدد الموظفين: ' + workers.length);
-      Logger.log('عدد الموردين: ' + suppliers.length);
-      Logger.log('عدد المعاملات: ' + transactions.length);
-      
-      // ===== 1. المنتجات =====
       var productsSheet = sheet.getSheetByName('المنتجات') || sheet.insertSheet('المنتجات');
+      var existingProducts = getSheetAsObjects(productsSheet);
+      var productMap = {};
+      for (var i = 0; i < existingProducts.length; i++) {
+        productMap[existingProducts[i].id] = existingProducts[i];
+      }
+      
+      // Update with incoming products
+      for (var i = 0; i < products.length; i++) {
+        var p = products[i];
+        if (productMap[p.id]) {
+          // Update existing - use latest timestamp or incoming data
+          productMap[p.id] = Object.assign(productMap[p.id], p);
+        } else {
+          // Add new product
+          productMap[p.id] = p;
+        }
+      }
+      
+      // Rewrite products sheet with merged data
       productsSheet.clear();
       productsSheet.getRange(1, 1, 1, 9).setBackground('#f59e0b').setFontWeight('bold').setFontColor('#ffffff');
       productsSheet.appendRow(['ID', 'الاسم', 'الباركود', 'التكلفة', 'التجزئة', 'الجملة', 'المخزون', 'الفئة', 'الوحدة']);
-      
-      if (products.length > 0) {
-        for (var i = 0; i < products.length; i++) {
-          var p = products[i];
-          productsSheet.appendRow([
-            p.id || '',
-            p.name || '',
-            p.barcode || '',
-            p.cost || 0,
-            p.retail || 0,
-            p.wholesale || 0,
-            p.stock || 0,
-            p.category || '',
-            p.unit || 'piece'
-          ]);
-        }
+      for (var id in productMap) {
+        var p = productMap[id];
+        productsSheet.appendRow([
+          p.id || '',
+          p.name || '',
+          p.barcode || '',
+          p.cost || 0,
+          p.retail || 0,
+          p.wholesale || 0,
+          p.stock || 0,
+          p.category || '',
+          p.unit || 'piece'
+        ]);
       }
-      Logger.log('✓ تم حفظ ' + products.length + ' منتج');
+      Logger.log('✓ تم دمج ' + Object.keys(productMap).length + ' منتج');
       
-      // ===== 2. المبيعات =====
+      // 2. SALES: Append only (never overwrite sales data)
+      var sales = data.sales || [];
       var salesSheet = sheet.getSheetByName('المبيعات') || sheet.insertSheet('المبيعات');
-      salesSheet.clear();
-      salesSheet.getRange(1, 1, 1, 6).setBackground('#10b981').setFontWeight('bold').setFontColor('#ffffff');
-      salesSheet.appendRow(['رقم الفاتورة', 'التاريخ', 'الإجمالي', 'الكاشير', 'البائع', 'عدد المنتجات']);
+      if (salesSheet.getLastRow() === 0) {
+        salesSheet.getRange(1, 1, 1, 6).setBackground('#10b981').setFontWeight('bold').setFontColor('#ffffff');
+        salesSheet.appendRow(['رقم الفاتورة', 'التاريخ', 'الإجمالي', 'الكاشير', 'البائع', 'عدد المنتجات']);
+      }
+      var existingSales = getSheetAsObjects(salesSheet, ['id', 'date', 'total', 'cashier', 'sellerId', 'itemsCount']);
+      var existingSalesIds = {};
+      for (var i = 0; i < existingSales.length; i++) {
+        existingSalesIds[existingSales[i].id] = true;
+      }
       
-      if (sales.length > 0) {
-        for (var i = 0; i < sales.length; i++) {
-          var s = sales[i];
+      // Only add sales that don't exist yet
+      var newSalesCount = 0;
+      for (var i = 0; i < sales.length; i++) {
+        var s = sales[i];
+        if (!existingSalesIds[s.id]) {
           salesSheet.appendRow([
             s.id || '',
             s.date || '',
@@ -75,86 +111,131 @@ function doPost(e) {
             s.sellerId || '',
             s.items ? s.items.length : 0
           ]);
+          newSalesCount++;
         }
       }
-      Logger.log('✓ تم حفظ ' + sales.length + ' عملية بيع');
+      Logger.log('✓ تمت إضافة ' + newSalesCount + ' عملية بيع جديدة');
       
-      // ===== 3. الديون =====
+      // 3. DEBTS: Merge by ID
+      var debts = data.debts || [];
       var debtsSheet = sheet.getSheetByName('الديون') || sheet.insertSheet('الديون');
+      var existingDebts = getSheetAsObjects(debtsSheet);
+      var debtMap = {};
+      for (var i = 0; i < existingDebts.length; i++) {
+        debtMap[existingDebts[i].id] = existingDebts[i];
+      }
+      for (var i = 0; i < debts.length; i++) {
+        var d = debts[i];
+        if (debtMap[d.id]) {
+          // Keep the one with higher paid amount (more recent payment)
+          if ((d.paid || 0) > (debtMap[d.id].paid || 0)) {
+            debtMap[d.id] = d;
+          }
+        } else {
+          debtMap[d.id] = d;
+        }
+      }
       debtsSheet.clear();
       debtsSheet.getRange(1, 1, 1, 8).setBackground('#ef4444').setFontWeight('bold').setFontColor('#ffffff');
       debtsSheet.appendRow(['ID', 'العميل', 'الهاتف', 'المبلغ الكلي', 'المدفوع', 'المتبقي', 'التاريخ', 'العناصر']);
+      for (var id in debtMap) {
+        var d = debtMap[id];
+        debtsSheet.appendRow([
+          d.id || '',
+          d.customer || '',
+          d.phone || '',
+          d.amount || 0,
+          d.paid || 0,
+          d.remaining || 0,
+          d.date || '',
+          d.items || ''
+        ]);
+      }
+      Logger.log('✓ تم دمج ' + Object.keys(debtMap).length + ' دين');
       
-      if (debts.length > 0) {
-        for (var i = 0; i < debts.length; i++) {
-          var d = debts[i];
-          debtsSheet.appendRow([
-            d.id || '',
-            d.customer || '',
-            d.phone || '',
-            d.amount || 0,
-            d.paid || 0,
-            d.remaining || 0,
-            d.date || '',
-            d.items || ''
-          ]);
+      // 4. SUPPLIERS: Merge by ID
+      var suppliers = data.suppliers || [];
+      var suppliersSheet = sheet.getSheetByName('الموردين') || sheet.insertSheet('الموردين');
+      var existingSuppliers = getSheetAsObjects(suppliersSheet);
+      var supplierMap = {};
+      for (var i = 0; i < existingSuppliers.length; i++) {
+        supplierMap[existingSuppliers[i].id] = existingSuppliers[i];
+      }
+      for (var i = 0; i < suppliers.length; i++) {
+        var s = suppliers[i];
+        if (supplierMap[s.id]) {
+          // Use higher totalPurchases value
+          if ((s.totalPurchases || 0) > (supplierMap[s.id].totalPurchases || 0)) {
+            supplierMap[s.id] = s;
+          }
+        } else {
+          supplierMap[s.id] = s;
         }
       }
-      Logger.log('✓ تم حفظ ' + debts.length + ' دين');
-      
-      // ===== 4. الموردين =====
-      var suppliersSheet = sheet.getSheetByName('الموردين') || sheet.insertSheet('الموردين');
       suppliersSheet.clear();
       suppliersSheet.getRange(1, 1, 1, 5).setBackground('#3b82f6').setFontWeight('bold').setFontColor('#ffffff');
       suppliersSheet.appendRow(['ID', 'الاسم', 'الهاتف', 'العنوان', 'إجمالي المشتريات']);
+      for (var id in supplierMap) {
+        var s = supplierMap[id];
+        suppliersSheet.appendRow([
+          s.id || '',
+          s.name || '',
+          s.phone || '',
+          s.address || '',
+          s.totalPurchases || 0
+        ]);
+      }
+      Logger.log('✓ تم دمج ' + Object.keys(supplierMap).length + ' مورد');
       
-      if (suppliers.length > 0) {
-        for (var i = 0; i < suppliers.length; i++) {
-          var s = suppliers[i];
-          suppliersSheet.appendRow([
-            s.id || '',
-            s.name || '',
-            s.phone || '',
-            s.address || '',
-            s.totalPurchases || 0
-          ]);
+      // 5. WORKERS: Merge by ID
+      var workers = data.workers || [];
+      var workersSheet = sheet.getSheetByName('الموظفين') || sheet.insertSheet('الموظفين');
+      var existingWorkers = getSheetAsObjects(workersSheet);
+      var workerMap = {};
+      for (var i = 0; i < existingWorkers.length; i++) {
+        workerMap[existingWorkers[i].id] = existingWorkers[i];
+      }
+      for (var i = 0; i < workers.length; i++) {
+        var w = workers[i];
+        if (workerMap[w.id]) {
+          workerMap[w.id] = Object.assign(workerMap[w.id], w);
+        } else {
+          workerMap[w.id] = w;
         }
       }
-      Logger.log('✓ تم حفظ ' + suppliers.length + ' مورد');
-      
-      // ===== 5. الموظفين =====
-      var workersSheet = sheet.getSheetByName('الموظفين') || sheet.insertSheet('الموظفين');
       workersSheet.clear();
       workersSheet.getRange(1, 1, 1, 6).setBackground('#8b5cf6').setFontWeight('bold').setFontColor('#ffffff');
       workersSheet.appendRow(['ID', 'الاسم', 'الهاتف', 'الكود', 'الدور', 'آخر نشاط']);
-      
-      if (workers.length > 0) {
-        for (var i = 0; i < workers.length; i++) {
-          var w = workers[i];
-          var workerPin = w.pin ? "'" + w.pin.toString() : '';
-          workersSheet.appendRow([
-            w.id || '',
-            w.name || '',
-            w.phone || '',
-            workerPin,
-            w.role || 'عامل',
-            w.lastActivity || ''
-          ]);
-        }
-        Logger.log('✓ تم حفظ ' + workers.length + ' موظف');
-      } else {
-        Logger.log('⚠️ لا يوجد موظفين');
+      for (var id in workerMap) {
+        var w = workerMap[id];
+        var workerPin = w.pin ? "'" + w.pin.toString() : '';
+        workersSheet.appendRow([
+          w.id || '',
+          w.name || '',
+          w.phone || '',
+          workerPin,
+          w.role || 'عامل',
+          w.lastActivity || ''
+        ]);
       }
+      Logger.log('✓ تم دمج ' + Object.keys(workerMap).length + ' موظف');
       
-      // ===== 6. المشتريات =====
+      // 6. PURCHASES: Append only
+      var purchases = data.purchases || [];
       var purchasesSheet = sheet.getSheetByName('المشتريات') || sheet.insertSheet('المشتريات');
-      purchasesSheet.clear();
-      purchasesSheet.getRange(1, 1, 1, 6).setBackground('#06b6d4').setFontWeight('bold').setFontColor('#ffffff');
-      purchasesSheet.appendRow(['ID', 'اسم المورد', 'المبلغ', 'ملاحظات', 'التاريخ', 'معرف المورد']);
-      
-      if (purchases.length > 0) {
-        for (var i = 0; i < purchases.length; i++) {
-          var p = purchases[i];
+      if (purchasesSheet.getLastRow() === 0) {
+        purchasesSheet.getRange(1, 1, 1, 6).setBackground('#06b6d4').setFontWeight('bold').setFontColor('#ffffff');
+        purchasesSheet.appendRow(['ID', 'اسم المورد', 'المبلغ', 'ملاحظات', 'التاريخ', 'معرف المورد']);
+      }
+      var existingPurchases = getSheetAsObjects(purchasesSheet);
+      var existingPurchaseIds = {};
+      for (var i = 0; i < existingPurchases.length; i++) {
+        existingPurchaseIds[existingPurchases[i].id] = true;
+      }
+      var newPurchasesCount = 0;
+      for (var i = 0; i < purchases.length; i++) {
+        var p = purchases[i];
+        if (!existingPurchaseIds[p.id]) {
           purchasesSheet.appendRow([
             p.id || '',
             p.supplierName || '',
@@ -163,19 +244,27 @@ function doPost(e) {
             p.date || '',
             p.supplierId || ''
           ]);
+          newPurchasesCount++;
         }
       }
-      Logger.log('✓ تم حفظ ' + purchases.length + ' عملية شراء');
+      Logger.log('✓ تمت إضافة ' + newPurchasesCount + ' عملية شراء جديدة');
       
-      // ===== 7. المعاملات المالية (جديد) =====
+      // 7. TRANSACTIONS: Append only
+      var transactions = data.transactions || [];
       var transactionsSheet = sheet.getSheetByName('المعاملات المالية') || sheet.insertSheet('المعاملات المالية');
-      transactionsSheet.clear();
-      transactionsSheet.getRange(1, 1, 1, 7).setBackground('#ec4899').setFontWeight('bold').setFontColor('#ffffff');
-      transactionsSheet.appendRow(['ID', 'التاريخ', 'النوع', 'الوصف', 'المبلغ', 'الرصيد بعد العملية', 'المستخدم']);
-      
-      if (transactions.length > 0) {
-        for (var i = 0; i < transactions.length; i++) {
-          var t = transactions[i];
+      if (transactionsSheet.getLastRow() === 0) {
+        transactionsSheet.getRange(1, 1, 1, 7).setBackground('#ec4899').setFontWeight('bold').setFontColor('#ffffff');
+        transactionsSheet.appendRow(['ID', 'التاريخ', 'النوع', 'الوصف', 'المبلغ', 'الرصيد بعد العملية', 'المستخدم']);
+      }
+      var existingTransactions = getSheetAsObjects(transactionsSheet);
+      var existingTxIds = {};
+      for (var i = 0; i < existingTransactions.length; i++) {
+        existingTxIds[existingTransactions[i].id] = true;
+      }
+      var newTxCount = 0;
+      for (var i = 0; i < transactions.length; i++) {
+        var t = transactions[i];
+        if (!existingTxIds[t.id]) {
           transactionsSheet.appendRow([
             t.id || '',
             t.date || '',
@@ -185,42 +274,59 @@ function doPost(e) {
             t.balanceAfter || 0,
             t.user || ''
           ]);
+          newTxCount++;
         }
       }
-      Logger.log('✓ تم حفظ ' + transactions.length + ' معاملة مالية');
+      Logger.log('✓ تمت إضافة ' + newTxCount + ' معاملة مالية جديدة');
       
-      // ===== 8. معلومات المتجر والخزنة =====
+      // 8. CASH REGISTER: Use the highest value (most recent/largest)
       var infoSheet = sheet.getSheetByName('معلومات المتجر') || sheet.insertSheet('معلومات المتجر');
+      var existingInfo = getSheetAsObjects(infoSheet);
+      var infoMap = {};
+      for (var i = 0; i < existingInfo.length; i++) {
+        if (existingInfo[i][0]) infoMap[existingInfo[i][0]] = existingInfo[i][1];
+      }
+      
+      // Update with incoming info
+      if (data.shopName) infoMap['اسم المتجر'] = data.shopName;
+      if (data.manager && data.manager.name) infoMap['اسم المدير'] = data.manager.name;
+      if (data.manager && data.manager.pin) infoMap['كود المدير'] = "'" + data.manager.pin.toString();
+      if (data.manager && data.manager.phone) infoMap['هاتف المدير'] = data.manager.phone;
+      
+      // For cash register, use the maximum value (prevents losing money data)
+      var currentCash = infoMap['رصيد الخزنة'] || 0;
+      var incomingCash = data.cashRegister || 0;
+      infoMap['رصيد الخزنة'] = Math.max(currentCash, incomingCash);
+      
+      infoMap['آخر مزامنة'] = new Date().toISOString();
+      if (data.nextInvoice) {
+        var currentNextInv = infoMap['رقم الفاتورة القادم'] || 1001;
+        infoMap['رقم الفاتورة القادم'] = Math.max(currentNextInv, data.nextInvoice);
+      }
+      
       infoSheet.clear();
       infoSheet.getRange(1, 1, 1, 2).setBackground('#f59e0b').setFontWeight('bold').setFontColor('#ffffff');
       infoSheet.appendRow(['المفتاح', 'القيمة']);
-      infoSheet.appendRow(['اسم المتجر', data.shopName || '']);
-      infoSheet.appendRow(['اسم المدير', data.manager && data.manager.name ? data.manager.name : '']);
-      
-      var managerPin = data.manager && data.manager.pin ? "'" + data.manager.pin.toString() : '';
-      infoSheet.appendRow(['كود المدير', managerPin]);
-      
-      infoSheet.appendRow(['هاتف المدير', data.manager && data.manager.phone ? data.manager.phone : '']);
-      infoSheet.appendRow(['رصيد الخزنة', data.cashRegister || 0]);
-      infoSheet.appendRow(['آخر مزامنة', data.timestamp || new Date().toISOString()]);
-      infoSheet.appendRow(['رقم الفاتورة القادم', data.nextInvoice || 1001]);
-      
-      Logger.log('✓ تم حفظ رصيد الخزنة: ' + (data.cashRegister || 0));
+      for (var key in infoMap) {
+        infoSheet.appendRow([key, infoMap[key]]);
+      }
+      Logger.log('✓ تم تحديث معلومات المتجر والخزنة');
       
       // ===== 9. سجل المزامنة =====
       var syncLogSheet = sheet.getSheetByName('سجل المزامنة') || sheet.insertSheet('سجل المزامنة');
       if (syncLogSheet.getLastRow() === 0) {
-        syncLogSheet.getRange(1, 1, 1, 8).setBackground('#6b7280').setFontWeight('bold').setFontColor('#ffffff');
-        syncLogSheet.appendRow(['التاريخ', 'المتجر', 'المنتجات', 'المبيعات', 'الموظفين', 'الموردين', 'المعاملات', 'الحالة']);
+        syncLogSheet.getRange(1, 1, 1, 9).setBackground('#6b7280').setFontWeight('bold').setFontColor('#ffffff');
+        syncLogSheet.appendRow(['التوقيت', 'الجهاز', 'المتجر', 'المنتجات', 'المبيعات الجديدة', 'الموظفين', 'الموردين', 'المعاملات الجديدة', 'الحالة']);
       }
       syncLogSheet.appendRow([
-        new Date().toISOString(),
+        syncTime,
+        deviceId,
         data.shopName || 'Unknown',
         products.length,
-        sales.length,
+        newSalesCount,
         workers.length,
         suppliers.length,
-        transactions.length,
+        newTxCount,
         'SUCCESS'
       ]);
       
@@ -231,13 +337,15 @@ function doPost(e) {
           status: 'success',
           message: 'تمت المزامنة بنجاح ✅',
           timestamp: new Date().toISOString(),
-          counts: {
-            products: products.length,
-            sales: sales.length,
-            workers: workers.length,
-            suppliers: suppliers.length,
-            purchases: purchases.length,
-            transactions: transactions.length
+          merged: {
+            products: Object.keys(productMap).length,
+            salesAdded: newSalesCount,
+            debts: Object.keys(debtMap).length,
+            workers: Object.keys(workerMap).length,
+            suppliers: Object.keys(supplierMap).length,
+            purchasesAdded: newPurchasesCount,
+            transactionsAdded: newTxCount,
+            cashRegister: infoMap['رصيد الخزنة']
           }
         }))
         .setMimeType(ContentService.MimeType.JSON);
@@ -264,6 +372,25 @@ function doPost(e) {
       }))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+// Helper function to read sheet as array of objects
+function getSheetAsObjects(sheet, headers) {
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+  var data = sheet.getDataRange().getValues();
+  if (!headers) {
+    // Auto-detect headers from first row
+    headers = data[0];
+  }
+  var result = [];
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headers[j]] = data[i][j];
+    }
+    result.push(obj);
+  }
+  return result;
 }
 
 function doGet(e) {
