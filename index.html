@@ -1030,6 +1030,7 @@
         `;
         document.body.appendChild(modal);
         setTimeout(() => document.getElementById('receivedAmount')?.focus(), 100);
+        // Set callback for immediate execution on confirm
         window.confirmSaleCallback = onConfirm;
       }
       
@@ -1038,6 +1039,7 @@
         if (modal) {
           modal.remove();
         }
+        // Clear callback reference to prevent memory leaks
         window.confirmSaleCallback = null;
       }
       
@@ -1072,17 +1074,21 @@
         // Close the popup first
         closeChangePopup();
         
-        // Execute the callback directly with proper context
+        // Execute the callback directly with proper context - NO LAG
         if (window.confirmSaleCallback) {
           try {
-            window.confirmSaleCallback();
+            // Store callback and clear immediately to prevent double execution
+            const callback = window.confirmSaleCallback;
+            window.confirmSaleCallback = null;
+            callback();
           } catch (e) {
             console.error('Error in confirmSaleCallback:', e);
             toast('❌ خطأ في تأكيد البيع', 'error');
+            // Fallback on error
+            finalizeSale(false, total);
           }
-          window.confirmSaleCallback = null;
         } else {
-          // Fallback: call finalizeSale directly
+          // Direct call if no callback
           finalizeSale(false, total);
         }
       }
@@ -1554,6 +1560,11 @@
           syncInterval=setInterval(()=>syncUp(true),1000);
           // Also sync down every 1 second to get updates from other devices
           syncDownInterval=setInterval(()=>syncDown(true),1000);
+          // Initial sync to ensure latest data
+          setTimeout(() => {
+            syncDown(true);
+            syncUp(true);
+          }, 500);
         }
         updateSyncInd();
       }
@@ -1587,7 +1598,7 @@
             // Calculate hash of remote data
             const remoteHash = calculateRemoteHash(d);
             
-            // Only proceed if data has changed
+            // Only proceed if data has changed (skip in silent mode if no changes)
             if (remoteHash === lastSyncedDataHash && silent) {
               // No changes detected, skip update in silent mode
               return;
@@ -1611,23 +1622,28 @@
             lastSyncedDataHash = remoteHash;
             if(st && !silent)st.innerHTML=`<div class="sync-success">✅ تم التحميل!</div>`;
             if(!silent){toast("✅ تم تحميل البيانات");loadPage(activePage);}
-            else{loadPage(activePage);}
+            else{
+              // In silent mode, just refresh the current page without toast
+              loadPage(activePage);
+            }
           }else{if(!silent){if(st)st.innerHTML=`<div class="sync-error">⚠️ لا بيانات</div>`;toast("لا بيانات","error");}}
         }catch(err){if(!silent){if(st)st.innerHTML=`<div class="sync-error">❌ ${err.message}</div>`;toast("❌ فشل","error");}}
       }
       
-      // Calculate hash of remote data for comparison
+      // Calculate hash of remote data for comparison (includes all fields for complete sync)
       function calculateRemoteHash(d) {
         const dataStr = JSON.stringify({
+          shopName: d.shopName || '',
+          managerPin: d.manager?.pin || '',
+          cashRegister: d.cashRegister || 0,
+          nextInvoice: d.nextInvoice || 0,
           products: d.products?.length || 0,
           sales: d.sales?.length || 0,
           debts: d.debts?.length || 0,
           suppliers: d.suppliers?.length || 0,
           workers: d.workers?.length || 0,
           purchases: d.purchases?.length || 0,
-          transactions: d.transactions?.length || 0,
-          cashRegister: d.cashRegister || 0,
-          nextInvoice: d.nextInvoice || 0
+          transactions: d.transactions?.length || 0
         });
         return btoa(unescape(encodeURIComponent(dataStr)));
       }
@@ -1976,7 +1992,7 @@
       
       // ====================== AUTO PRINT WITHOUT POPUP ======================
       function autoPrintReceipt(receiptHTML) {
-        // Create a hidden iframe for printing without popup
+        // Create a hidden iframe for TRUE silent printing without ANY popup or lag
         const iframe = document.createElement('iframe');
         iframe.style.position = 'fixed';
         iframe.style.right = '0';
@@ -1984,6 +2000,7 @@
         iframe.style.width = '0';
         iframe.style.height = '0';
         iframe.style.border = 'none';
+        iframe.style.visibility = 'hidden';
         document.body.appendChild(iframe);
         
         const doc = iframe.contentWindow.document;
@@ -2002,12 +2019,42 @@
               ${receiptHTML}
             </style>
           </head>
-          <body onload="window.print(); setTimeout(() => { try { window.parent.document.body.removeChild(window.parent.document.querySelector('iframe')); } catch(e){} }, 1000);">
+          <body>
             ${receiptHTML}
+            <script>
+              // Auto-print immediately on load with zero delay
+              window.onload = function() {
+                try {
+                  window.print();
+                } catch(e) {}
+                // Self-cleanup after print command is sent
+                setTimeout(function() {
+                  try {
+                    if (window.parent && window.parent.document) {
+                      var iframes = window.parent.document.querySelectorAll('iframe');
+                      for (var i = 0; i < iframes.length; i++) {
+                        if (iframes[i].style.visibility === 'hidden') {
+                          window.parent.document.body.removeChild(iframes[i]);
+                          break;
+                        }
+                      }
+                    }
+                  } catch(e) {}
+                }, 500);
+              };
+            <\/script>
           </body>
           </html>
         `);
         doc.close();
+        
+        // Force immediate print trigger (backup method)
+        setTimeout(() => {
+          try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+          } catch(e) {}
+        }, 100);
       }
       
       // Enhanced auto-print with direct printer access for desktop apps
