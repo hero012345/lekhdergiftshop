@@ -921,10 +921,10 @@
         try {
           let data;
           
-          // Try modern fetch first
+          // Try modern fetch first with shorter timeout for better UX
           if (typeof fetch === 'function' && typeof AbortController === 'function') {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // Reduced from 8s to 5s
             
             try {
               const r = await fetch(db.googleSheetURL + "?action=get", {
@@ -932,14 +932,16 @@
                 headers: { Accept: "application/json" },
               });
               clearTimeout(timeoutId);
+              if (!r.ok) throw new Error('HTTP ' + r.status);
               data = await r.json();
             } catch (fetchErr) {
               clearTimeout(timeoutId);
               console.log("Fetch failed, trying XHR:", fetchErr.message);
-              data = await xhrRequest(db.googleSheetURL + "?action=get");
+              // Try XHR with shorter timeout too
+              data = await xhrRequest(db.googleSheetURL + "?action=get", 5000);
             }
           } else {
-            data = await xhrRequest(db.googleSheetURL + "?action=get");
+            data = await xhrRequest(db.googleSheetURL + "?action=get", 5000);
           }
           
           if (data.status === "success" && data.hasData) {
@@ -995,8 +997,14 @@
           console.log("Sync down error:", err.message);
           if (!silent) {
             if (st) st.innerHTML = `<div class="sync-error">❌ ${err.message}</div>`;
-            toast("❌ فشل", "error");
+            // Don't show error toast on initial load timeout - just continue with local data
+            if (document.readyState === 'complete') {
+              toast("⚠️ استخدام البيانات المحلية", "info");
+            }
           }
+          // Continue with local data even if sync fails
+          db.setupCompleted = true;
+          saveData();
         }
       }
       
