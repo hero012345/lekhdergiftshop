@@ -1620,7 +1620,7 @@
           syncDownInterval=setInterval(()=>syncDown(true),5000);
           // Initial sync to ensure latest data
           setTimeout(() => {
-            syncDown(true);
+            syncDown(false); // Non-silent initial sync to show loading
             syncUp(true);
           }, 500);
         }
@@ -1649,7 +1649,7 @@
       async function syncDown(silent=false) {
         if(!db.googleSheetURL){if(!silent)toast("⚠️ لا رابط","error");return;}
         const st=document.getElementById("syncStatus");
-        if(st && !silent)st.innerHTML=`<div class="sync-loading">📥 تحميل...</div>`;
+        if(st && (!silent || lastSyncedDataHash === null))st.innerHTML=`<div class="sync-loading">📥 تحميل...</div>`;
         try {
           const r=await fetch(db.googleSheetURL+"?action=get");const d=await r.json();
           if(d.status==="success"&&d.hasData){
@@ -1659,8 +1659,8 @@
             // Only proceed if data has changed (skip in silent mode if no changes)
             if (remoteHash === lastSyncedDataHash && silent) {
               // No changes detected, skip update in silent mode
+              if(st && lastSyncedDataHash !== null) st.innerHTML='';
               return;
-            }
             
             // Smart merge: don't overwrite local sales with remote ones blindly
             // Instead, merge new sales from remote while keeping local unsynced sales
@@ -1670,12 +1670,9 @@
             }
             if(d.cashRegister!==undefined)db.cashRegister=n(d.cashRegister);
             
-            // Merge products by ID (keep latest version)
+            // FIXED: Replace products entirely from server for consistency across devices
             if(d.products && d.products.length > 0) {
-              const remoteProductMap = {};
-              d.products.forEach(p => remoteProductMap[p.id] = p);
-              db.products = db.products.filter(p => !remoteProductMap[p.id]);
-              db.products = db.products.concat(d.products);
+              db.products = d.products;
             }
             
             // Merge sales - add only those not already present locally
