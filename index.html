@@ -909,6 +909,35 @@
         // Start loading progress animation BEFORE showing screens
         simulateLoadingProgress();
         
+        // Only attempt cloud sync if device is already configured
+        if (db.setupCompleted && db.googleSheetURL && db.autoSyncEnabled !== false) {
+          try {
+            const r = await fetch(db.googleSheetURL+"?action=get");
+            const d = await r.json();
+            if (d.status==="success" && d.hasData) {
+              // Merge remote data with local
+              if(d.shopName) db.shopName = d.shopName;
+              if(d.manager?.name) db.manager = {name: d.manager.name, pin: d.manager.pin||"", phone: d.manager.phone||""};
+              if(d.cashRegister!==undefined) db.cashRegister = n(d.cashRegister);
+              if(d.products && d.products.length > 0) db.products = d.products;
+              
+              // Merge sales, debts, etc. (avoid duplicates)
+              ["sales","debts","suppliers","workers","purchases","transactions"].forEach(k => {
+                if(d[k] && d[k].length > 0) {
+                  const localIds = {};
+                  if(db[k]) db[k].forEach(item => localIds[item.id] = true);
+                  d[k].forEach(item => { if(!localIds[item.id]) db[k].push(item); });
+                }
+              });
+              
+              if(d.nextInvoice) db.nextInvoice = d.nextInvoice;
+              db.lastSyncTime = new Date().toISOString();
+              saveData();
+              toast("✅ تم تحميل البيانات من السحابة", "success", 2000);
+            }
+          } catch(e) { console.log("Cloud sync skipped:", e.message); }
+        }
+        
         if (!db.setupCompleted) { document.getElementById("setupScreen").classList.remove("hidden"); showSetupStep(1); }
         else showLogin();
       };
@@ -1756,7 +1785,8 @@
               // No changes detected, skip update in silent mode
               if(st && lastSyncedDataHash !== null) st.innerHTML='';
               return;
-            
+            }
+
             // Smart merge: don't overwrite local sales with remote ones blindly
             // Instead, merge new sales from remote while keeping local unsynced sales
             if(d.shopName)db.shopName=d.shopName;
