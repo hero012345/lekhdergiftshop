@@ -912,7 +912,13 @@
         // Only attempt cloud sync if device is already configured
         if (db.setupCompleted && db.googleSheetURL && db.autoSyncEnabled !== false) {
           try {
-            const r = await fetch(db.googleSheetURL+"?action=get");
+            // Use AbortController for timeout to prevent hanging on slow browsers
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            const r = await fetch(db.googleSheetURL+"?action=get", { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
             const d = await r.json();
             if (d.status==="success" && d.hasData) {
               // Merge remote data with local
@@ -1685,6 +1691,19 @@
             })),
             timestamp: new Date().toISOString()
           };
+          
+          // Use beacon API for better cross-browser compatibility when silent
+          if (silent && navigator.sendBeacon) {
+            const blob = new Blob([JSON.stringify(payload)], {type: 'application/json'});
+            navigator.sendBeacon(db.googleSheetURL, blob);
+            db.lastSyncTime = new Date().toISOString();
+            saveData();
+            if(st) st.innerHTML=`<div class="sync-success">✅ تمت المزامنة</div>`;
+            updateSyncInd();
+            return;
+          }
+          
+          // Standard fetch for non-silent or when beacon not available
           await fetch(db.googleSheetURL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1775,7 +1794,17 @@
         const st=document.getElementById("syncStatus");
         if(st && (!silent || lastSyncedDataHash === null))st.innerHTML=`<div class="sync-loading">📥 تحميل...</div>`;
         try {
-          const r=await fetch(db.googleSheetURL+"?action=get");const d=await r.json();
+          // Use fetch with timeout for better cross-browser compatibility
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+          
+          const r = await fetch(db.googleSheetURL+"?action=get", {
+            signal: controller.signal,
+            headers: { 'Accept': 'application/json' }
+          });
+          clearTimeout(timeoutId);
+          
+          const d = await r.json();
           if(d.status==="success"&&d.hasData){
             // Calculate hash of remote data
             const remoteHash = calculateRemoteHash(d);
@@ -1829,7 +1858,13 @@
               loadPage(activePage);
             }
           }else{if(!silent){if(st)st.innerHTML=`<div class="sync-error">⚠️ لا بيانات</div>`;toast("لا بيانات","error");}}
-        }catch(err){if(!silent){if(st)st.innerHTML=`<div class="sync-error">❌ ${err.message}</div>`;toast("❌ فشل","error");}}
+        }catch(err){
+          console.log("Sync down error:", err.message);
+          if(!silent){
+            if(st)st.innerHTML=`<div class="sync-error">❌ ${err.message}</div>`;
+            toast("❌ فشل","error");
+          }
+        }
       }
       
       // Calculate hash of remote data for comparison (includes all fields for complete sync)
