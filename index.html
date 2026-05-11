@@ -759,8 +759,8 @@
 
       // ====================== INIT ======================
       
-      // Loading progress simulation
-      function simulateLoadingProgress() {
+      // Loading progress simulation - now integrated with actual loading
+      async function simulateLoadingProgress() {
         const progressBar = document.getElementById('progressBar');
         const progressText = document.getElementById('progressText');
         const loadingStatus = document.getElementById('loadingStatus');
@@ -778,32 +778,63 @@
         
         let stageIndex = 0;
         
-        const interval = setInterval(() => {
-          progress += Math.random() * 5 + 2;
-          if (progress > 100) progress = 100;
-          
-          // Update stage text based on progress
-          if (stageIndex < stages.length && progress >= stages[stageIndex].pct) {
-            loadingStatus.textContent = stages[stageIndex].text;
-            stageIndex++;
+        const updateProgress = (targetProgress) => {
+          return new Promise(resolve => {
+            const interval = setInterval(() => {
+              if (progress < targetProgress) {
+                progress += Math.random() * 5 + 2;
+                if (progress > targetProgress) progress = targetProgress;
+                
+                // Update stage text based on progress
+                while (stageIndex < stages.length && progress >= stages[stageIndex].pct) {
+                  loadingStatus.textContent = stages[stageIndex].text;
+                  stageIndex++;
+                }
+                
+                progressBar.style.width = progress + '%';
+                progressText.textContent = Math.round(progress) + '%';
+              } else {
+                clearInterval(interval);
+                resolve();
+              }
+            }, 50);
+          });
+        };
+        
+        // Stage 1: Initial load (10-30%)
+        await updateProgress(30);
+        
+        // Stage 2: Database init (30-50%)
+        await updateProgress(50);
+        
+        // Stage 3: Settings load (50-70%)
+        await updateProgress(70);
+        
+        // Stage 4: Sync attempt (70-90%) - only if autoSync enabled
+        if (db.autoSyncEnabled && db.googleSheetURL) {
+          loadingStatus.textContent = 'جاري المزامنة...';
+          try {
+            // Try a quick sync but don't block if it fails
+            await Promise.race([
+              syncUp(true),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+            ]);
+          } catch(e) {
+            console.log('Initial sync skipped or failed:', e);
           }
-          
-          progressBar.style.width = progress + '%';
-          progressText.textContent = Math.round(progress) + '%';
-          
-          if (progress >= 100) {
-            clearInterval(interval);
-            setTimeout(() => {
-              overlay.style.display = 'none';
-            }, 500);
-          }
-        }, 100);
+        }
+        await updateProgress(90);
+        
+        // Stage 5: Final prep (90-100%)
+        await updateProgress(100);
+        
+        // Hide overlay after brief delay
+        setTimeout(() => {
+          overlay.style.display = 'none';
+        }, 300);
       }
       
       window.onload = async () => {
-        // Start loading progress animation
-        simulateLoadingProgress();
-        
         const params = new URLSearchParams(window.location.search);
         const sheetURL = params.get("sheet");
         const autoSetup = params.get("autoSetup");
@@ -874,6 +905,10 @@
 
         if (sheetURL && autoSetup==="true" && !db.setupCompleted) { await quickSetup(sheetURL); return; }
         if (sheetURL && db.setupCompleted) { db.googleSheetURL=decodeURIComponent(sheetURL); saveData(); toast("✅ تم تحديث رابط المزامنة"); showLogin(); return; }
+        
+        // Start loading progress animation BEFORE showing screens
+        simulateLoadingProgress();
+        
         if (!db.setupCompleted) { document.getElementById("setupScreen").classList.remove("hidden"); showSetupStep(1); }
         else showLogin();
       };
