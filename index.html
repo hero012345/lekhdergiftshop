@@ -265,6 +265,21 @@
     </style>
   </head>
   <body>
+    <!-- Loading Progress Overlay -->
+    <div id="loadingProgressOverlay" class="loading-overlay">
+      <div class="loading-box">
+        <div class="text-4xl mb-4">🎁</div>
+        <h2 class="text-xl font-bold text-gray-800 mb-2">جاري تحميل النظام...</h2>
+        <p class="text-gray-500 text-sm mb-4">يرجى الانتظار قليلاً</p>
+        <div class="w-full bg-gray-200 rounded-full h-4 mb-3 overflow-hidden">
+          <div id="progressBar" class="h-4 rounded-full transition-all duration-300 ease-out" 
+               style="background: linear-gradient(135deg, #be185d, #9333ea); width: 0%;"></div>
+        </div>
+        <div id="progressText" class="text-pink-600 font-semibold text-lg">0%</div>
+        <div id="loadingStatus" class="text-gray-400 text-xs mt-2">تهيئة الموارد...</div>
+      </div>
+    </div>
+
     <div class="toast-container" id="toastContainer"></div>
 
     <button id="mobileMenuBtn" class="mobile-menu-btn" onclick="toggleMobileSidebar()">
@@ -743,7 +758,52 @@
       }
 
       // ====================== INIT ======================
+      
+      // Loading progress simulation
+      function simulateLoadingProgress() {
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const loadingStatus = document.getElementById('loadingStatus');
+        const overlay = document.getElementById('loadingProgressOverlay');
+        
+        let progress = 0;
+        const stages = [
+          { pct: 10, text: 'تحميل الموارد...' },
+          { pct: 30, text: 'تهيئة قاعدة البيانات...' },
+          { pct: 50, text: 'تحميل الإعدادات...' },
+          { pct: 70, text: 'مزامنة البيانات...' },
+          { pct: 90, text: 'التحضير النهائي...' },
+          { pct: 100, text: 'جاهز!' }
+        ];
+        
+        let stageIndex = 0;
+        
+        const interval = setInterval(() => {
+          progress += Math.random() * 5 + 2;
+          if (progress > 100) progress = 100;
+          
+          // Update stage text based on progress
+          if (stageIndex < stages.length && progress >= stages[stageIndex].pct) {
+            loadingStatus.textContent = stages[stageIndex].text;
+            stageIndex++;
+          }
+          
+          progressBar.style.width = progress + '%';
+          progressText.textContent = Math.round(progress) + '%';
+          
+          if (progress >= 100) {
+            clearInterval(interval);
+            setTimeout(() => {
+              overlay.style.display = 'none';
+            }, 500);
+          }
+        }, 100);
+      }
+      
       window.onload = async () => {
+        // Start loading progress animation
+        simulateLoadingProgress();
+        
         const params = new URLSearchParams(window.location.search);
         const sheetURL = params.get("sheet");
         const autoSetup = params.get("autoSetup");
