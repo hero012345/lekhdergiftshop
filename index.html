@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#be185d" />
     <meta name="description" content="نظام نقطة بيع متجر الهدايا الذهبي" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https: blob:; connect-src 'self' https://script.google.com https://sheets.googleapis.com; manifest-src 'self' data:; base-uri 'self'; form-action 'self';" />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
     <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoi4KmF2YTYhdCw2Kkg2Kqg2KfZhCDYp9mE2YjZitixINio2YrYsdmG2YgiLCJzaG9ydF9uYW1lIjoi4KmF2YTYhdCw2KkgIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiIzFhMDUzMyIsInRoZW1lX2NvbG9yIjoiI2JlMTg1ZCIsImljb25zIjpbeyJzcmMiOiJodHRwczovL3VpLmhlcm9pY29ucy5jb20vMS4wL3N2Zy8yNC9zb2xpZC9naWZ0LnN2ZyIsInNpemVzIjoiMTkyeDE5MiIsInR5cGUiOiJpbWFnZS9zdmciLCJwdXJwb3NlIjoiYW55IG1hc2thYmxlIn1dfQ==" />
     <title>متجر الهدايا الذهبي - POS Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -846,6 +851,12 @@
             if (link) {
               try {
                 const url = new URL(link);
+                // Validate that the URL is from a trusted source (Google Apps Script)
+                if (!url.hostname.endsWith('.google.com') && !url.hostname.endsWith('.github.io')) {
+                  toast("⚠️ رابط غير موثوق", "error");
+                  resolve(false);
+                  return;
+                }
                 const config = url.searchParams.get('config');
                 if (config) {
                   window.location.href = link;
@@ -993,6 +1004,29 @@
         const params = new URLSearchParams(window.location.search);
         const sheetURL = params.get("sheet");
         const autoSetup = params.get("autoSetup");
+        const configParam = params.get("config");
+        
+        // Security: Validate URL parameters before processing
+        if (sheetURL) {
+          try {
+            const parsedUrl = new URL(decodeURIComponent(sheetURL));
+            if (!parsedUrl.hostname.endsWith('.google.com')) {
+              console.warn("⚠️ Invalid sheet URL hostname:", parsedUrl.hostname);
+              toast("⚠️ رابط المزامنة غير موثوق", "error");
+              params.delete('sheet');
+            }
+          } catch(e) {
+            console.warn("⚠️ Invalid sheet URL format");
+            params.delete('sheet');
+          }
+        }
+        
+        // Security: Validate config parameter source
+        if (configParam && window.location.hostname !== 'hero012345.github.io' && !window.location.hostname.endsWith('.github.io')) {
+          console.warn("⚠️ Config parameter from untrusted origin");
+          params.delete('config');
+        }
+        
         const saved = localStorage.getItem("giftShopDB");
         
         if (saved) { 
@@ -1021,7 +1055,6 @@
         }
 
         // Handle QR code configuration
-        const configParam = params.get("config");
         if (configParam) {
           try {
             const decodedConfig = decodeURIComponent(atob(configParam));
@@ -1069,8 +1102,37 @@
           }
         }
 
-        if (sheetURL && autoSetup==="true" && !db.setupCompleted) { await quickSetup(sheetURL); return; }
-        if (sheetURL && db.setupCompleted) { db.googleSheetURL=decodeURIComponent(sheetURL); saveData(); toast("✅ تم تحديث رابط المزامنة"); showLogin(); return; }
+        if (sheetURL && autoSetup==="true" && !db.setupCompleted) { 
+          // Validate sheet URL before quick setup
+          try {
+            const parsedUrl = new URL(decodeURIComponent(sheetURL));
+            if (!parsedUrl.hostname.endsWith('.google.com')) {
+              toast("⚠️ رابط المزامنة غير موثوق", "error");
+            } else {
+              await quickSetup(sheetURL); 
+            }
+          } catch(e) {
+            toast("⚠️ رابط المزامنة غير صالح", "error");
+          }
+          return; 
+        }
+        if (sheetURL && db.setupCompleted) { 
+          // Validate sheet URL before saving
+          try {
+            const parsedUrl = new URL(decodeURIComponent(sheetURL));
+            if (parsedUrl.hostname.endsWith('.google.com')) {
+              db.googleSheetURL=decodeURIComponent(sheetURL); 
+              saveData(); 
+              toast("✅ تم تحديث رابط المزامنة"); 
+            } else {
+              toast("⚠️ رابط المزامنة غير موثوق", "error");
+            }
+          } catch(e) {
+            toast("⚠️ رابط المزامنة غير صالح", "error");
+          }
+          showLogin(); 
+          return; 
+        }
         
         // Show loading progress
         await showLoadingProgress();
@@ -1093,6 +1155,18 @@
       };
 
       async function quickSetup(url) {
+        // Validate URL before processing
+        try {
+          const parsedUrl = new URL(decodeURIComponent(url));
+          if (!parsedUrl.hostname.endsWith('.google.com')) {
+            toast("⚠️ رابط المزامنة غير موثوق", "error");
+            return;
+          }
+        } catch(e) {
+          toast("⚠️ رابط المزامنة غير صالح", "error");
+          return;
+        }
+        
         db.googleSheetURL = decodeURIComponent(url);
         const ov = document.createElement("div"); ov.className="loading-overlay";
         ov.innerHTML = `<div class="loading-box"><div style="font-size:50px" class="float-icon">☁️</div><h3 style="font-size:18px;font-weight:700;color:#be185d;margin-top:12px">جاري التحميل...</h3></div>`;
@@ -2044,6 +2118,19 @@
         db.shopName = shopName;
         db.manager.name = mgrName;
         db.manager.pin = mgrPin;  // Will be encrypted by saveData()
+        // Validate Google Sheet URL before saving
+        if (googleURL) {
+          try {
+            const parsedUrl = new URL(googleURL);
+            if (!parsedUrl.hostname.endsWith('.google.com')) {
+              toast("⚠️ رابط المزامنة غير موثوق", "error");
+              return;
+            }
+          } catch(e) {
+            toast("⚠️ رابط المزامنة غير صالح", "error");
+            return;
+          }
+        }
         db.googleSheetURL = googleURL;
         db.autoSyncEnabled = autoSync;
         
@@ -2095,7 +2182,7 @@
       function rmWorker(i){if(confirm(`حذف ${db.workers[i]?.name}؟`)){db.workers.splice(i,1);saveData();if(db.googleSheetURL)syncUp(true);loadPage(7);}}
       function chgName(){const v=prompt("اسم المتجر:",db.shopName);if(v&&v.trim()){db.shopName=v.trim();document.getElementById("sidebarShopName").textContent=db.shopName;saveData();toast("✅ تم");loadPage(7);}}
       function chgPin(){const v=prompt("كود جديد (4+):");if(v&&v.length>=4){db.manager.pin=v;saveData();if(db.googleSheetURL)syncUp(true);toast("✅ تم");}else if(v)toast("4 أرقام على الأقل","error");}
-      function chgURL(){const v=prompt("رابط Google:",db.googleSheetURL);if(v===null)return;if(v&&v.startsWith("https://script.google.com")){db.googleSheetURL=v;saveData();toast("✅ تم");loadPage(7);}else if(v===""){db.googleSheetURL="";saveData();toast("تم الإزالة","info");loadPage(7);}else if(v)toast("رابط غير صالح","error");}
+      function chgURL(){const v=prompt("رابط Google:",db.googleSheetURL);if(v===null)return;if(v&&v.startsWith("https://script.google.com")){try{const parsedUrl=new URL(v);if(!parsedUrl.hostname.endsWith('.google.com')){toast("⚠️ رابط غير موثوق","error");return;}}catch(e){toast("⚠️ رابط غير صالح","error");return;}db.googleSheetURL=v;saveData();toast("✅ تم");loadPage(7);}else if(v===""){db.googleSheetURL="";saveData();toast("تم الإزالة","info");loadPage(7);}else if(v)toast("رابط غير صالح","error");}
       
       // Change PIN with validation - accessible from config panel
       function updateManagerPin(newPin) {
