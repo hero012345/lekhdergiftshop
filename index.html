@@ -759,79 +759,234 @@
 
       // ====================== INIT ======================
       
-      // Loading progress simulation - now integrated with actual loading
-      async function simulateLoadingProgress() {
-        const progressBar = document.getElementById('progressBar');
-        const progressText = document.getElementById('progressText');
-        const loadingStatus = document.getElementById('loadingStatus');
-        const overlay = document.getElementById('loadingProgressOverlay');
-        
-        let progress = 0;
+      // Cross-browser compatible loading progress
+      async function showLoadingProgress() {
+        const progressBar = document.getElementById("progressBar");
+        const progressText = document.getElementById("progressText");
+        const loadingStatus = document.getElementById("loadingStatus");
+        const overlay = document.getElementById("loadingProgressOverlay");
+
         const stages = [
-          { pct: 10, text: 'تحميل الموارد...' },
-          { pct: 30, text: 'تهيئة قاعدة البيانات...' },
-          { pct: 50, text: 'تحميل الإعدادات...' },
-          { pct: 70, text: 'مزامنة البيانات...' },
-          { pct: 90, text: 'التحضير النهائي...' },
-          { pct: 100, text: 'جاهز!' }
+          { pct: 15, text: "تحميل الموارد...", delay: 200 },
+          { pct: 35, text: "تهيئة قاعدة البيانات...", delay: 150 },
+          { pct: 55, text: "تحميل الإعدادات...", delay: 100 },
+          { pct: 75, text: "فحص الاتصال...", delay: 150 },
+          { pct: 95, text: "التحضير النهائي...", delay: 100 },
+          { pct: 100, text: "جاهز!", delay: 200 },
         ];
-        
-        let stageIndex = 0;
-        
-        const updateProgress = (targetProgress) => {
-          return new Promise(resolve => {
-            const interval = setInterval(() => {
-              if (progress < targetProgress) {
-                progress += Math.random() * 5 + 2;
-                if (progress > targetProgress) progress = targetProgress;
-                
-                // Update stage text based on progress
-                while (stageIndex < stages.length && progress >= stages[stageIndex].pct) {
-                  loadingStatus.textContent = stages[stageIndex].text;
-                  stageIndex++;
+
+        for (const stage of stages) {
+          loadingStatus.textContent = stage.text;
+          await animateProgress(progressBar, progressText, stage.pct, stage.delay);
+        }
+
+        setTimeout(() => {
+          overlay.style.display = "none";
+        }, 300);
+      }
+
+      function animateProgress(bar, text, targetPct, duration) {
+        return new Promise((resolve) => {
+          const startPct = parseFloat(bar.style.width) || 0;
+          const diff = targetPct - startPct;
+          const startTime = Date.now();
+          
+          function step() {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const easeProgress = progress < 0.5 
+              ? 2 * progress * progress 
+              : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+            
+            const currentPct = startPct + (diff * easeProgress);
+            
+            bar.style.width = currentPct + "%";
+            text.textContent = Math.round(currentPct) + "%";
+            
+            if (progress < 1) {
+              requestAnimationFrame(step);
+            } else {
+              resolve();
+            }
+          }
+          
+          requestAnimationFrame(step);
+        });
+      }
+
+      // Configuration prompt for new users
+      async function showConfigPrompt() {
+        return new Promise((resolve) => {
+          const modal = document.createElement("div");
+          modal.className = "modal show";
+          modal.innerHTML = `
+            <div class="modal-content max-w-md">
+              <div class="p-6 rounded-t-3xl text-center" style="background:linear-gradient(135deg,#be185d,#9333ea)">
+                <div class="text-5xl mb-3">🎁</div>
+                <h3 class="text-xl font-bold text-white">مرحباً بك!</h3>
+              </div>
+              <div class="p-6 text-center">
+                <p class="text-gray-700 mb-6">هل لديك رابط إعداد من جهاز آخر؟</p>
+                <div class="space-y-3">
+                  <button onclick="window.importConfigAction()" class="btn w-full py-4 bg-green-600 text-white rounded-xl font-bold text-lg">
+                    ✅ نعم، لدي رابط أو QR
+                  </button>
+                  <button onclick="window.manualSetupAction()" class="btn w-full py-4 bg-blue-600 text-white rounded-xl font-bold text-lg">
+                    ⚙️ إعداد جديد
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+          document.body.appendChild(modal);
+          
+          window.importConfigAction = () => {
+            modal.remove();
+            const link = prompt("🔗 الصق رابط الإعداد أو رمز QR:\n(أو اضغط إلغاء للمسح)");
+            if (link) {
+              try {
+                const url = new URL(link);
+                const config = url.searchParams.get('config');
+                if (config) {
+                  window.location.href = link;
+                  resolve(true);
+                } else {
+                  toast("⚠️ رابط غير صالح", "error");
+                  resolve(false);
                 }
-                
-                progressBar.style.width = progress + '%';
-                progressText.textContent = Math.round(progress) + '%';
-              } else {
-                clearInterval(interval);
-                resolve();
+              } catch (e) {
+                toast("⚠️ رابط غير صالح", "error");
+                resolve(false);
               }
-            }, 50);
-          });
-        };
+            } else {
+              resolve(false);
+            }
+          };
+          
+          window.manualSetupAction = () => {
+            modal.remove();
+            resolve(false);
+          };
+        });
+      }
+
+      // XMLHttpRequest fallback for older browsers
+      function xhrRequest(url, timeout = 8000) {
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.timeout = timeout;
+          xhr.open('GET', url, true);
+          xhr.setRequestHeader('Accept', 'application/json');
+          
+          xhr.onload = function() {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                resolve(JSON.parse(xhr.responseText));
+              } catch (e) {
+                reject(new Error('Invalid JSON response'));
+              }
+            } else {
+              reject(new Error('HTTP ' + xhr.status));
+            }
+          };
+          
+          xhr.onerror = () => reject(new Error('Network error'));
+          xhr.ontimeout = () => reject(new Error('Timeout'));
+          
+          xhr.send();
+        });
+      }
+
+      // Enhanced syncDown with XHR fallback
+      async function syncDownWithFallback(silent = false) {
+        if (!db.googleSheetURL) {
+          if (!silent) toast("⚠️ لا رابط", "error");
+          return;
+        }
         
-        // Stage 1: Initial load (10-30%)
-        await updateProgress(30);
+        const st = document.getElementById("syncStatus");
+        if (st && !silent) st.innerHTML = `<div class="sync-loading">📥 تحميل...</div>`;
         
-        // Stage 2: Database init (30-50%)
-        await updateProgress(50);
-        
-        // Stage 3: Settings load (50-70%)
-        await updateProgress(70);
-        
-        // Stage 4: Sync attempt (70-90%) - only if autoSync enabled
-        if (db.autoSyncEnabled && db.googleSheetURL) {
-          loadingStatus.textContent = 'جاري المزامنة...';
-          try {
-            // Try a quick sync but don't block if it fails
-            await Promise.race([
-              syncUp(true),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
-            ]);
-          } catch(e) {
-            console.log('Initial sync skipped or failed:', e);
+        try {
+          let data;
+          
+          // Try modern fetch first
+          if (typeof fetch === 'function' && typeof AbortController === 'function') {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            
+            try {
+              const r = await fetch(db.googleSheetURL + "?action=get", {
+                signal: controller.signal,
+                headers: { Accept: "application/json" },
+              });
+              clearTimeout(timeoutId);
+              data = await r.json();
+            } catch (fetchErr) {
+              clearTimeout(timeoutId);
+              console.log("Fetch failed, trying XHR:", fetchErr.message);
+              data = await xhrRequest(db.googleSheetURL + "?action=get");
+            }
+          } else {
+            data = await xhrRequest(db.googleSheetURL + "?action=get");
+          }
+          
+          if (data.status === "success" && data.hasData) {
+            if (data.shopName) db.shopName = data.shopName;
+            if (data.manager?.name) {
+              db.manager = {
+                name: data.manager.name,
+                pin: data.manager.pin || "",
+                phone: data.manager.phone || "",
+              };
+            }
+            if (data.cashRegister !== undefined) db.cashRegister = n(data.cashRegister);
+            
+            if (data.products && data.products.length > 0) {
+              db.products = data.products;
+            }
+            
+            if (data.sales && data.sales.length > 0) {
+              const localSalesIds = {};
+              db.sales.forEach((s) => (localSalesIds[s.id] = true));
+              data.sales.forEach((s) => {
+                if (!localSalesIds[s.id]) db.sales.push(s);
+              });
+            }
+            
+            ["debts", "suppliers", "workers", "purchases", "transactions"].forEach((k) => {
+              if (data[k] && data[k].length > 0) {
+                const localIds = {};
+                if (db[k]) db[k].forEach((item) => (localIds[item.id] = true));
+                data[k].forEach((item) => {
+                  if (!localIds[item.id]) db[k].push(item);
+                });
+              }
+            });
+            
+            if (data.nextInvoice) db.nextInvoice = data.nextInvoice;
+            db.lastSyncTime = new Date().toISOString();
+            db.setupCompleted = true;
+            saveData();
+            
+            if (st && !silent) st.innerHTML = `<div class="sync-success">✅ تم التحميل!</div>`;
+            if (!silent) {
+              toast("✅ تم تحميل البيانات");
+              if (activePage !== undefined) loadPage(activePage);
+            }
+          } else {
+            if (!silent) {
+              if (st) st.innerHTML = `<div class="sync-error">⚠️ لا بيانات</div>`;
+              toast("لا بيانات", "error");
+            }
+          }
+        } catch (err) {
+          console.log("Sync down error:", err.message);
+          if (!silent) {
+            if (st) st.innerHTML = `<div class="sync-error">❌ ${err.message}</div>`;
+            toast("❌ فشل", "error");
           }
         }
-        await updateProgress(90);
-        
-        // Stage 5: Final prep (90-100%)
-        await updateProgress(100);
-        
-        // Hide overlay after brief delay
-        setTimeout(() => {
-          overlay.style.display = 'none';
-        }, 300);
       }
       
       window.onload = async () => {
@@ -839,11 +994,11 @@
         const sheetURL = params.get("sheet");
         const autoSetup = params.get("autoSetup");
         const saved = localStorage.getItem("giftShopDB");
+        
         if (saved) { 
           try { 
             const loadedData = JSON.parse(saved);
             db = { ...db, ...loadedData };
-            // No decryption needed - PINs are plain text
           } catch(e){} 
         }
         ["products","sales","debts","suppliers","workers","purchases","transactions"].forEach(k => { if(!Array.isArray(db[k])) db[k]=[]; });
@@ -853,7 +1008,19 @@
         checkConnectivity();
         setupAutoSyncOnOnline();
 
-        // Handle QR code configuration - FIXED: PINs now stored in plain text
+        // Configuration prompt for new users without config link
+        if (!db.setupCompleted && !sheetURL && !params.get("config")) {
+          await showLoadingProgress();
+          if (await showConfigPrompt()) {
+            return; // User chose to import config, will redirect
+          }
+          // User chose manual setup - continue to setup screen
+          document.getElementById("setupScreen").classList.remove("hidden");
+          showSetupStep(1);
+          return;
+        }
+
+        // Handle QR code configuration
         const configParam = params.get("config");
         if (configParam) {
           try {
@@ -866,34 +1033,33 @@
               db.autoSyncEnabled = configData.autoSyncEnabled !== false;
               db.setupCompleted = true;
               
-              // Apply manager PIN (already encrypted, just copy it)
               if (configData.managerPin) {
                 db.manager = {
                   name: configData.managerName || db.manager.name,
-                  pin: configData.managerPin, // Keep encrypted form
+                  pin: configData.managerPin,
                   phone: db.manager.phone || ""
                 };
               } else if (configData.managerName) {
                 db.manager.name = configData.managerName;
               }
               
-              // Apply workers with their encrypted PINs
               if (configData.workers && Array.isArray(configData.workers)) {
                 db.workers = configData.workers.map(w => ({
                   id: Date.now() + Math.random(),
                   name: w.name || "",
-                  pin: w.pin || "", // Keep encrypted form
+                  pin: w.pin || "",
                   role: w.role || "موظف"
                 }));
               }
               
               saveData();
               
+              // Download data after config
               if (db.googleSheetURL) {
-                await syncUp(true);
+                await syncDownWithFallback(true);
               }
               
-              toast("✅ تم الإعداد التلقائي بنجاح مع جميع كلمات المرور", "success", 4000);
+              toast("✅ تم الإعداد التلقائي بنجاح", "success", 4000);
               showLogin();
               return;
             }
@@ -906,46 +1072,24 @@
         if (sheetURL && autoSetup==="true" && !db.setupCompleted) { await quickSetup(sheetURL); return; }
         if (sheetURL && db.setupCompleted) { db.googleSheetURL=decodeURIComponent(sheetURL); saveData(); toast("✅ تم تحديث رابط المزامنة"); showLogin(); return; }
         
-        // Start loading progress animation BEFORE showing screens
-        simulateLoadingProgress();
+        // Show loading progress
+        await showLoadingProgress();
         
-        // Only attempt cloud sync if device is already configured
-        if (db.setupCompleted && db.googleSheetURL && db.autoSyncEnabled !== false) {
+        // Attempt cloud sync for ALL devices with googleSheetURL (not just setupCompleted)
+        if (db.googleSheetURL && db.autoSyncEnabled !== false) {
           try {
-            // Use AbortController for timeout to prevent hanging on slow browsers
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
-            
-            const r = await fetch(db.googleSheetURL+"?action=get", { signal: controller.signal });
-            clearTimeout(timeoutId);
-            
-            const d = await r.json();
-            if (d.status==="success" && d.hasData) {
-              // Merge remote data with local
-              if(d.shopName) db.shopName = d.shopName;
-              if(d.manager?.name) db.manager = {name: d.manager.name, pin: d.manager.pin||"", phone: d.manager.phone||""};
-              if(d.cashRegister!==undefined) db.cashRegister = n(d.cashRegister);
-              if(d.products && d.products.length > 0) db.products = d.products;
-              
-              // Merge sales, debts, etc. (avoid duplicates)
-              ["sales","debts","suppliers","workers","purchases","transactions"].forEach(k => {
-                if(d[k] && d[k].length > 0) {
-                  const localIds = {};
-                  if(db[k]) db[k].forEach(item => localIds[item.id] = true);
-                  d[k].forEach(item => { if(!localIds[item.id]) db[k].push(item); });
-                }
-              });
-              
-              if(d.nextInvoice) db.nextInvoice = d.nextInvoice;
-              db.lastSyncTime = new Date().toISOString();
-              saveData();
-              toast("✅ تم تحميل البيانات من السحابة", "success", 2000);
-            }
-          } catch(e) { console.log("Cloud sync skipped:", e.message); }
+            await syncDownWithFallback(true);
+          } catch(e) {
+            console.log("Initial sync skipped:", e.message);
+          }
         }
         
-        if (!db.setupCompleted) { document.getElementById("setupScreen").classList.remove("hidden"); showSetupStep(1); }
-        else showLogin();
+        if (!db.setupCompleted) { 
+          document.getElementById("setupScreen").classList.remove("hidden"); 
+          showSetupStep(1); 
+        } else {
+          showLogin();
+        }
       };
 
       async function quickSetup(url) {
@@ -1097,11 +1241,20 @@
 
       function renderQuick() {
         const c=document.getElementById("quickProducts"); if(!c)return; c.innerHTML="";
-        db.products.forEach(p => {
+        
+        // Filter out products with zero or negative stock
+        const availableProducts = db.products.filter(p => p.stock > 0);
+        
+        if (availableProducts.length === 0) {
+          c.innerHTML = '<div class="col-span-full text-center py-8 text-gray-400"><div class="text-4xl mb-2">📦</div><p class="text-sm">لا توجد منتجات متوفرة</p></div>';
+          return;
+        }
+        
+        availableProducts.forEach(p => {
           const d=document.createElement("div");
-          d.className = `product-quick-card p-2 sm:p-3 ${p.stock<=0?'out-of-stock':''}`;
+          d.className = `product-quick-card p-2 sm:p-3`;
           d.innerHTML=`<div class="text-xl mb-1">${CAT_EMOJI[p.category]||"🎁"}</div><div class="font-semibold text-xs mb-1 text-gray-800 truncate">${p.name}</div><div class="font-black text-sm" style="color:#be185d;">${p.retail} ${CURRENCY}</div><div class="text-xs ${p.stock<10?'text-red-500':'text-gray-400'} mt-0.5">مخزون: ${p.stock}</div>`;
-          if(p.stock>0) d.onclick=()=>{addToCart(p);sndClick();};
+          d.onclick=()=>{addToCart(p);sndClick();};
           c.appendChild(d);
         });
       }
@@ -1722,32 +1875,8 @@
       }
 
       async function syncDown(silent=false) {
-        if(!db.googleSheetURL){if(!silent)toast("⚠️ لا رابط","error");return;}
-        const st=document.getElementById("syncStatus");
-        if(st)st.innerHTML=`<div class="sync-loading">📥 تحميل...</div>`;
-        try {
-          const r=await fetch(db.googleSheetURL+"?action=get");const d=await r.json();
-          if(d.status==="success"&&d.hasData){
-            if(!silent && !confirm(`استبدال البيانات؟\n${(d.products||[]).length} منتج | ${(d.sales||[]).length} عملية`)){if(st)st.innerHTML=`<div class="sync-error">تم الإلغاء</div>`;return;}
-            if(d.shopName)db.shopName=d.shopName;
-            if(d.manager?.name){
-              // No decryption needed - PINs are now plain text
-              db.manager={name:d.manager.name,pin:d.manager.pin||"",phone:d.manager.phone||""};
-            }
-            if(d.cashRegister!==undefined)db.cashRegister=n(d.cashRegister);
-            ["products","sales","debts","suppliers","workers","purchases","transactions"].forEach(k=>{
-              if(d[k]){
-                db[k]=d[k];
-                // Worker PINs are already plain text - no decryption needed
-              }
-            });
-            if(d.nextInvoice)db.nextInvoice=d.nextInvoice;
-            db.lastSyncTime=new Date().toISOString();saveData();
-            if(st)st.innerHTML=`<div class="sync-success">✅ تم التحميل!</div>`;
-            if(!silent){toast("✅ تم تحميل البيانات");loadPage(activePage);}
-            else{loadPage(activePage);}
-          }else{if(!silent){if(st)st.innerHTML=`<div class="sync-error">⚠️ لا بيانات</div>`;toast("لا بيانات","error");}}
-        }catch(err){if(!silent){if(st)st.innerHTML=`<div class="sync-error">❌ ${err.message}</div>`;toast("❌ فشل","error");}}
+        // Use the new fallback version with XHR support
+        await syncDownWithFallback(silent);
       }
 
       function toggleAuto(on){db.autoSyncEnabled=on;saveData();if(on){startAutoSync();toast("✅ تلقائي مفعّل");}else{stopAutoSync();toast("⏸️ موقف","info");}}
@@ -1790,81 +1919,8 @@
       
       // Enhanced syncDown that only updates when data changes (smart merge)
       async function syncDown(silent=false) {
-        if(!db.googleSheetURL){if(!silent)toast("⚠️ لا رابط","error");return;}
-        const st=document.getElementById("syncStatus");
-        if(st && (!silent || lastSyncedDataHash === null))st.innerHTML=`<div class="sync-loading">📥 تحميل...</div>`;
-        try {
-          // Use fetch with timeout for better cross-browser compatibility
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
-          
-          const r = await fetch(db.googleSheetURL+"?action=get", {
-            signal: controller.signal,
-            headers: { 'Accept': 'application/json' }
-          });
-          clearTimeout(timeoutId);
-          
-          const d = await r.json();
-          if(d.status==="success"&&d.hasData){
-            // Calculate hash of remote data
-            const remoteHash = calculateRemoteHash(d);
-            
-            // Only proceed if data has changed (skip in silent mode if no changes)
-            if (remoteHash === lastSyncedDataHash && silent) {
-              // No changes detected, skip update in silent mode
-              if(st && lastSyncedDataHash !== null) st.innerHTML='';
-              return;
-            }
-
-            // Smart merge: don't overwrite local sales with remote ones blindly
-            // Instead, merge new sales from remote while keeping local unsynced sales
-            if(d.shopName)db.shopName=d.shopName;
-            if(d.manager?.name){
-              db.manager={name:d.manager.name,pin:d.manager.pin||"",phone:d.manager.phone||""};
-            }
-            if(d.cashRegister!==undefined)db.cashRegister=n(d.cashRegister);
-            
-            // FIXED: Replace products entirely from server for consistency across devices
-            if(d.products && d.products.length > 0) {
-              db.products = d.products;
-            }
-            
-            // Merge sales - add only those not already present locally
-            if(d.sales && d.sales.length > 0) {
-              const localSalesIds = {};
-              db.sales.forEach(s => localSalesIds[s.id] = true);
-              d.sales.forEach(s => {
-                if(!localSalesIds[s.id]) db.sales.push(s);
-              });
-            }
-            
-            // Merge other arrays similarly
-            ["debts","suppliers","workers","purchases","transactions"].forEach(k=>{
-              if(d[k] && d[k].length > 0) {
-                const localIds = {};
-                if(db[k]) db[k].forEach(item => localIds[item.id] = true);
-                d[k].forEach(item => {
-                  if(!localIds[item.id]) db[k].push(item);
-                });
-              }
-            });
-            
-            if(d.nextInvoice)db.nextInvoice=d.nextInvoice;
-            db.lastSyncTime=new Date().toISOString();saveData();
-            lastSyncedDataHash = remoteHash;
-            if(st && !silent)st.innerHTML=`<div class="sync-success">✅ تم التحميل!</div>`;
-            if(!silent){toast("✅ تم تحميل البيانات");loadPage(activePage);}
-            else{
-              loadPage(activePage);
-            }
-          }else{if(!silent){if(st)st.innerHTML=`<div class="sync-error">⚠️ لا بيانات</div>`;toast("لا بيانات","error");}}
-        }catch(err){
-          console.log("Sync down error:", err.message);
-          if(!silent){
-            if(st)st.innerHTML=`<div class="sync-error">❌ ${err.message}</div>`;
-            toast("❌ فشل","error");
-          }
-        }
+        // Use the new fallback version with XHR support
+        await syncDownWithFallback(silent);
       }
       
       // Calculate hash of remote data for comparison (includes all fields for complete sync)
