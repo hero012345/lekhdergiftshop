@@ -1,18 +1,1 @@
-```
-# Directories
-temp_repo/
-
-# Environment
-.env
-.env.local
-.env.*
-
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-
-# Editors
-.vscode/
-.idea/
-```
+Nothing needs to be added to the .gitignore file based on the provided changes. The only modified file is 'index.html', which is a source file and should not be ignored.
